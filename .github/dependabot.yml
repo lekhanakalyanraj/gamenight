@@ -48,3 +48,7 @@ updates:
     groups:
       base-images:
         patterns: ["*"]
+    ignore:
+      # Images stay on the Node LTS line we run in CI and locally (22); moving lines is a deliberate change.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
