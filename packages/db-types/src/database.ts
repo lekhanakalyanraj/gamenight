@@ -36,6 +36,25 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"host_lines": {
+                  Row: {
+                    "created_at": string,"event_id": string | null,"id": string,"kind": string,"room_id": string,"text": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"event_id"?: string | null,"id"?: string,"kind": string,"room_id": string,"text": string
+                  }
+                  Update: {
+                    "created_at"?: string,"event_id"?: string | null,"id"?: string,"kind"?: string,"room_id"?: string,"text"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "host_lines_room_id_fkey"
+      columns: ["room_id"]
+isOneToOne: false
+      referencedRelation: "rooms"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"profiles": {
                   Row: {
                     "created_at": string,"display_name": string,"id": string

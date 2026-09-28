@@ -71,3 +71,21 @@ export function RoomEnded({ title, children }: { title: string; children?: React
     </main>
   );
 }
+
+/** What the AI host last said. Labelled as AI, always (EU AI Act Article 50 transparency). */
+export function HostCaption({ text, size = "phone" }: { text: string | null; size?: "phone" | "tv" }) {
+  if (!text) return null;
+  const big = size === "tv";
+  return (
+    <p
+      data-testid="host-line"
+      aria-live="polite"
+      className={`flex items-baseline gap-3 rounded-2xl border border-accent/40 bg-surface-2 ${big ? "px-6 py-4 text-3xl" : "px-3 py-2 text-sm"}`}
+    >
+      <span className={`shrink-0 rounded-full bg-accent font-medium text-accent-ink ${big ? "px-3 py-1 text-lg" : "px-2 text-xs"}`}>
+        AI host
+      </span>
+      <span>{text}</span>
+    </p>
+  );
+}

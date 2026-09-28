@@ -6,3 +6,4 @@ export type Room = Public["Tables"]["rooms"]["Row"];
 export type RoomMember = Public["Tables"]["room_members"]["Row"];
 export type AgeRating = Public["Enums"]["age_rating"];
 export type RoomDisplay = Public["Tables"]["room_displays"]["Row"];
+export type HostLine = Public["Tables"]["host_lines"]["Row"];

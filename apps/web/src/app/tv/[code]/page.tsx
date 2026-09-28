@@ -20,7 +20,7 @@ export default async function TvRoomPage({ params }: PageProps<"/tv/[code]">) {
   const { data } = await supabase.from("rooms").select(LOBBY_SELECT).eq("code", code.toUpperCase()).maybeSingle();
   if (!data) redirect("/tv");
 
-  const { room_members, room_displays, ...room } = data;
+  const { room_members, room_displays, host_lines, ...room } = data;
   const joinUrl = `${await publicOrigin()}/join?code=${room.code}`;
   const qr = await QRCode.toDataURL(joinUrl, {
     margin: 1,
@@ -31,7 +31,7 @@ export default async function TvRoomPage({ params }: PageProps<"/tv/[code]">) {
 
   return (
     <TvLobby
-      lobby={{ room, members: room_members, displays: room_displays }}
+      lobby={{ room, members: room_members, displays: room_displays, hostLines: host_lines }}
       userId={identity.userId}
       joinUrl={joinUrl}
       qr={qr}

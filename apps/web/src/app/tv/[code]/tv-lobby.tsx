@@ -4,13 +4,21 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-import { AgeBadge, PlayerCount, PlayerTile, RoomEnded } from "@/components/lobby";
+import { AgeBadge, HostCaption, PlayerCount, PlayerTile, RoomEnded } from "@/components/lobby";
 import { ButtonLink } from "@/components/ui";
 import { useDisplayEvents, useLiveRoom } from "@/lib/realtime";
-import { activeMembers, type LobbyDisplay, type LobbyMember, type LobbyRoom, MIN_PLAYERS } from "@/lib/room";
+import {
+  activeMembers,
+  latestHostLine,
+  type LobbyDisplay,
+  type LobbyHostLine,
+  type LobbyMember,
+  type LobbyRoom,
+  MIN_PLAYERS,
+} from "@/lib/room";
 
 export function TvLobby({ lobby, userId, joinUrl, qr }: {
-  lobby: { room: LobbyRoom; members: LobbyMember[]; displays: LobbyDisplay[] };
+  lobby: { room: LobbyRoom; members: LobbyMember[]; displays: LobbyDisplay[]; hostLines: LobbyHostLine[] };
   userId: string;
   joinUrl: string;
   qr: string;
@@ -70,7 +78,10 @@ export function TvLobby({ lobby, userId, joinUrl, qr }: {
             <PlayerTile key={m.id} member={m} online={live.online.has(m.id)} size="tv" />
           ))}
         </ul>
-        <footer className="mt-auto flex items-center justify-between text-2xl text-muted">
+        <div className="mt-auto">
+          <HostCaption text={latestHostLine(live.hostLines)?.text ?? null} size="tv" />
+        </div>
+        <footer className="flex items-center justify-between text-2xl text-muted">
           <span>{players.length >= MIN_PLAYERS ? "Waiting for the host to start" : "Waiting for players to join"}</span>
           {!live.connected ? <span role="status">Reconnecting…</span> : null}
         </footer>

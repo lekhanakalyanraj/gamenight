@@ -7,10 +7,16 @@ dependencies = [
     "langgraph>=1.2",
     "langchain>=1.4",
     "langchain-anthropic>=1.7",
+    "psycopg[binary]>=3.2",
 ]
 
 [dependency-groups]
-dev = ["pytest>=9.0", "ruff>=0.14", "langgraph-sdk>=0.2"]
+dev = [
+    "pytest>=9.0",
+    "ruff>=0.14",
+    "langgraph-sdk>=0.2",
+    "langgraph-cli[inmem]>=0.4",
+]
 
 [build-system]
 requires = ["hatchling"]

@@ -32,6 +32,10 @@ jobs:
       - run: npx supabase test db
       - name: Security advisors (splinter)
         run: make db-advisors
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Dispatcher against the real outbox (exactly-once, backoff, dead-letter, concurrency)
+        working-directory: services/dispatcher
+        run: uv run pytest -q tests/test_dispatch_integration.py
 
   web:
     name: web (typecheck, lint, build)
@@ -89,6 +93,8 @@ jobs:
       - name: Give the app the local stack's publishable key
         run: npx supabase status -o env | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$/SUPABASE_PUBLISHABLE_KEY=\1/p' >> "$GITHUB_ENV"
       - run: npm run build -w @gamenight/web
+      # Playwright also starts the event path: agents (LangGraph dev server, scripted model) and the dispatcher.
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
         working-directory: apps/web

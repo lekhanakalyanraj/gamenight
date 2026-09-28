@@ -27,3 +27,8 @@ begin
   );
 end;
 $$;
+
+-- Local-only logins for the services, so docker compose can connect each as its own role.
+-- Every other environment grants these out of band; the migrations create the roles without login.
+alter role dispatcher_svc login password 'local-dev-dispatcher';
+alter role agents_svc login password 'local-dev-agents';

@@ -74,6 +74,13 @@ test("a TV and five phones share one live lobby", async ({ browser }) => {
     await expectPlayers(page, everyone, everyone);
   }
 
+  // The joins went through the outbox, the dispatcher and the agents: the AI host welcomes them on the TV,
+  // labelled as AI, and phones see the same line.
+  const hostLine = tv.getByTestId("host-line");
+  await expect(hostLine).toBeVisible({ timeout: 30_000 });
+  await expect(hostLine).toContainText("AI host");
+  await expect(asha.page.getByTestId("host-line")).toHaveText(((await hostLine.textContent()) ?? "").trim());
+
   // Dara's phone drops off: she stays in the room, and the TV dims her tile.
   await dara.context.close();
   await expectPlayers(tv, everyone, ["Priya", "Asha", "Ben", "Chen"]);

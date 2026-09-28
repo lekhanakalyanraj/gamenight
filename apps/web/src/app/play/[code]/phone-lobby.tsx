@@ -2,15 +2,22 @@
 
 import { useActionState, useState, useTransition } from "react";
 
-import { AgeBadge, PlayerCount, PlayerTile, RoomEnded } from "@/components/lobby";
+import { AgeBadge, HostCaption, PlayerCount, PlayerTile, RoomEnded } from "@/components/lobby";
 import { Button, ButtonLink, Card, Field, Notice, Page } from "@/components/ui";
 import { useLiveRoom } from "@/lib/realtime";
-import { activeMembers, type LobbyDisplay, type LobbyMember, type LobbyRoom } from "@/lib/room";
+import {
+  activeMembers,
+  latestHostLine,
+  type LobbyDisplay,
+  type LobbyHostLine,
+  type LobbyMember,
+  type LobbyRoom,
+} from "@/lib/room";
 import type { FormState } from "@/lib/validate";
 
 import { kickMember, leaveRoom, pairDisplay, removeDisplay } from "./actions";
 
-type Lobby = { room: LobbyRoom; members: LobbyMember[]; displays: LobbyDisplay[] };
+type Lobby = { room: LobbyRoom; members: LobbyMember[]; displays: LobbyDisplay[]; hostLines: LobbyHostLine[] };
 
 export function PhoneLobby({ lobby, meId, isHost }: { lobby: Lobby; meId: string; isHost: boolean }) {
   const live = useLiveRoom(lobby, { member_id: meId });
@@ -52,6 +59,8 @@ export function PhoneLobby({ lobby, meId, isHost }: { lobby: Lobby; meId: string
         </div>
         <AgeBadge rating={live.room.age_rating} />
       </header>
+
+      <HostCaption text={latestHostLine(live.hostLines)?.text ?? null} />
 
       {isHost ? <TvPanel roomId={live.room.id} displays={live.displays} tvOnline={live.tvOnline} /> : null}
 

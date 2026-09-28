@@ -31,6 +31,7 @@ services:
     ports: ["8123:8000"]
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
+    extra_hosts: ["host.docker.internal:host-gateway"]
     depends_on:
       agent-postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -39,6 +40,9 @@ services:
       REDIS_URI: redis://redis:6379
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # The agents reach the game database only as agents_svc (local login from supabase/seed.sql).
+      AGENTS_DATABASE_URL: postgresql://agents_svc:local-dev-agents@host.docker.internal:55422/postgres
+      GAMENIGHT_MODEL: ${GAMENIGHT_MODEL:-anthropic}
       # No LANGGRAPH_CLOUD_LICENSE_KEY: locally the server runs with a LangSmith key alone.
       # Production needs a licence key.
     healthcheck:
@@ -52,6 +56,12 @@ services:
     image: gamenight-dispatcher:dev
     build: { context: ../services/dispatcher }
     ports: ["8124:8080"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    depends_on:
+      agent-server: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://dispatcher_svc:local-dev-dispatcher@host.docker.internal:55422/postgres
+      AGENTS_URL: http://agent-server:8000
 
   voice:
     <<: *hardened
