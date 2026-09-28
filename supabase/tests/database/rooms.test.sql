@@ -74,12 +74,12 @@ select throws_ok(format($$ select public.join_room(%L, 'late') $$, (select code 
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
 select is((select count(*)::int from public.rooms), 0, 'outsiders cannot see a room they are not in');
 select is((select count(*)::int from public.room_members), 0, 'outsiders cannot see its members');
-select ok(not public.can_access_room_topic('room:' || (select id from r)::text),
+select ok(not private.can_access_room_topic('room:' || (select id from r)::text),
           'outsiders cannot subscribe to the room''s realtime topic');
-select ok(not public.can_access_room_topic('room:not-a-uuid'), 'malformed topics are refused');
+select ok(not private.can_access_room_topic('room:not-a-uuid'), 'malformed topics are refused');
 
 select pg_temp.act_as('00000000-0000-0000-0000-000000000101', true);
-select ok(public.can_access_room_topic('room:' || (select id from r)::text), 'members can subscribe to their room''s topic');
+select ok(private.can_access_room_topic('room:' || (select id from r)::text), 'members can subscribe to their room''s topic');
 
 -- ---- adult rooms ---------------------------------------------------------------------
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');

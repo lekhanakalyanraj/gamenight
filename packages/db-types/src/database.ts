@@ -74,10 +74,7 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "can_access_room_topic":
-{ Args: { "p_topic": string }; Returns: boolean
-                           },
-"create_room":
+            "create_room":
 { Args: { "p_age_rating"?: Database["public"]['Enums']["age_rating"],"p_confirm_adult"?: boolean,"p_nickname": string }; Returns: {
               "age_rating": Database["public"]['Enums']["age_rating"],
 "closed_at": string | null,
@@ -96,9 +93,6 @@ isOneToOne: false
       } },
 "is_guest":
 { Args: Record<PropertyKey, never>; Returns: boolean
-                           },
-"is_room_member":
-{ Args: { "p_room_id": string }; Returns: boolean
                            },
 "join_room":
 { Args: { "p_code": string,"p_confirm_adult"?: boolean,"p_nickname": string }; Returns: {
