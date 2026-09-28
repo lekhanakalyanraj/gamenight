@@ -1,0 +1,6 @@
+# Build context is the repo root; only the catalog and the workspace manifests are needed.
+*
+!package.json
+!package-lock.json
+!services/catalog/package.json
+!services/catalog/src

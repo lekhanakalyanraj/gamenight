@@ -1,11 +1,19 @@
-# The catalog service. Build from this directory: docker build services/catalog
-# No dependencies yet: Node runs the TypeScript directly (type stripping).
+# The catalog service. Build from the repo root (it installs from the workspace lockfile):
+#   docker build -f services/catalog/Dockerfile .
+# Node runs the TypeScript directly (type stripping), so there's no build step.
+
+FROM node:22-trixie-slim@sha256:b26b04c123d9ff8ab646ceb18b9d75a1173acf64b9a401094b906d27b29338d4 AS deps
+WORKDIR /repo
+COPY package.json package-lock.json ./
+COPY services/catalog/package.json services/catalog/
+RUN npm ci --workspace @gamenight/catalog --include-workspace-root=false --omit=dev --ignore-scripts
 
 FROM node:22-trixie-slim@sha256:b26b04c123d9ff8ab646ceb18b9d75a1173acf64b9a401094b906d27b29338d4
 ENV NODE_ENV=production PORT=8080
 WORKDIR /app
-COPY --chown=1000:1000 package.json ./
-COPY --chown=1000:1000 src ./src
+COPY --from=deps --chown=1000:1000 /repo/node_modules ./node_modules
+COPY --chown=1000:1000 services/catalog/package.json ./
+COPY --chown=1000:1000 services/catalog/src ./src
 # The app never runs npm, corepack or yarn at runtime; removing them drops their dependencies' CVEs too.
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
            /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \

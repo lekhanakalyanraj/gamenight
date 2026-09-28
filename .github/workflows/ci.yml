@@ -79,6 +79,9 @@ jobs:
       contents: read
     env:
       SUPABASE_URL: http://127.0.0.1:55421
+      # CI-only internal tokens: the stack here is thrown away after the job.
+      AGENTS_SERVICE_TOKEN: ci-agents-token
+      CATALOG_SERVICE_TOKEN: ci-catalog-token
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

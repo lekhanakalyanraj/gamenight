@@ -24,6 +24,8 @@ services:
       SUPABASE_BROWSER_URL: http://localhost:55421
       SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
       PUBLIC_ORIGIN: http://localhost:3200
+      AGENTS_URL: http://agent-server:8000
+      AGENTS_SERVICE_TOKEN: ${AGENTS_SERVICE_TOKEN:-local-dev-agents-token}
 
   agent-server:
     image: gamenight-agents:dev
@@ -43,6 +45,12 @@ services:
       # The agents reach the game database only as agents_svc (local login from supabase/seed.sql).
       AGENTS_DATABASE_URL: postgresql://agents_svc:local-dev-agents@host.docker.internal:55422/postgres
       GAMENIGHT_MODEL: ${GAMENIGHT_MODEL:-anthropic}
+      # Callers must send this token; hosts' logins are verified against Supabase's published keys.
+      AGENTS_SERVICE_TOKEN: ${AGENTS_SERVICE_TOKEN:-local-dev-agents-token}
+      SUPABASE_JWKS_URL: http://host.docker.internal:55421/auth/v1/.well-known/jwks.json
+      SUPABASE_JWT_ISSUER: http://127.0.0.1:55421/auth/v1
+      CATALOG_URL: http://catalog:8080
+      CATALOG_SERVICE_TOKEN: ${CATALOG_SERVICE_TOKEN:-local-dev-catalog-token}
       # No LANGGRAPH_CLOUD_LICENSE_KEY: locally the server runs with a LangSmith key alone.
       # Production needs a licence key.
     healthcheck:
@@ -62,6 +70,7 @@ services:
     environment:
       DATABASE_URL: postgresql://dispatcher_svc:local-dev-dispatcher@host.docker.internal:55422/postgres
       AGENTS_URL: http://agent-server:8000
+      AGENTS_SERVICE_TOKEN: ${AGENTS_SERVICE_TOKEN:-local-dev-agents-token}
 
   voice:
     <<: *hardened
@@ -72,8 +81,12 @@ services:
   catalog:
     <<: *hardened
     image: gamenight-catalog:dev
-    build: { context: ../services/catalog }
+    build: { context: .., dockerfile: services/catalog/Dockerfile }
     ports: ["8126:8080"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    environment:
+      CATALOG_DATABASE_URL: postgresql://catalog_svc:local-dev-catalog@host.docker.internal:55422/postgres
+      CATALOG_SERVICE_TOKEN: ${CATALOG_SERVICE_TOKEN:-local-dev-catalog-token}
 
   agent-postgres:
     image: postgres:16

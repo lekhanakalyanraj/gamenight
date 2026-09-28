@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(17);
+select plan(20);
 
 create function pg_temp.act_as(p_uid uuid, p_guest boolean default false) returns void language sql as $$
   select set_config('role', 'authenticated', true),
@@ -78,6 +78,13 @@ select is((select array_agg(p ->> 'nickname' order by p ->> 'nickname')
 select ok(agents_api.room_snapshot((select id from r))::text not like '%user_id%'
           and agents_api.room_snapshot((select id from r))::text not like '%00000000-0000%',
           'the snapshot contains no user ids');
+
+select is(agents_api.is_room_host((select id from r), '00000000-0000-0000-0000-00000000000a'), true,
+          'the auth check knows the room''s host');
+select is(agents_api.is_room_host((select id from r), '00000000-0000-0000-0000-000000000101'), false,
+          'and that a player is not the host');
+select throws_ok($$ set local role authenticated; select agents_api.is_room_host(gen_random_uuid(), gen_random_uuid()) $$,
+                 '42501', null, 'players cannot call the agents'' API');
 
 select pg_temp.act_as('00000000-0000-0000-0000-000000000103', true);
 select is((select count(*)::int from public.host_lines), 0, 'outsiders cannot read a room''s host lines');

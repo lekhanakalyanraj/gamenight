@@ -24,8 +24,8 @@ SEMGREP_RULESETS = --config p/typescript --config p/react --config p/nextjs --co
 SCAN = docker run --rm -v "$(CURDIR)":/src -w /src \
        -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src
 
-.PHONY: help images image-web scan-image sbom security-docker dast services-test up down db-start db-stop db-reset db-test db-types db-advisors agents-build services-up services-down \
-        agents-logs agents-dev dispatcher-dev agents-test web lan web-check check security security-secrets security-sast security-deps \
+.PHONY: help images image-web image-catalog scan-image sbom security-docker dast services-test up down db-start db-stop db-reset db-test db-types db-advisors agents-build services-up services-down \
+        agents-logs agents-dev dispatcher-dev catalog-dev agents-test web lan web-check check security security-secrets security-sast security-deps \
         security-workflows hooks
 
 help:            ## list commands
@@ -58,12 +58,19 @@ agents-logs:
 # The event path without Docker, for development and CI: LangGraph's in-memory dev server (no licence
 # needed; same API as the Agent Server) plus the dispatcher, both against the local Supabase.
 LOCAL_DB = 127.0.0.1:55422/postgres
+# Internal service tokens for local development only; every other environment sets its own secrets.
+AGENTS_SERVICE_TOKEN  ?= local-dev-agents-token
+CATALOG_SERVICE_TOKEN ?= local-dev-catalog-token
 agents-dev:      ## agents on LangGraph's dev server at :2024 (GAMENIGHT_MODEL=fake for a free scripted model)
 	cd services/agents && AGENTS_DATABASE_URL=postgresql://agents_svc:local-dev-agents@$(LOCAL_DB) \
-	  uv run langgraph dev --port 2024 --no-browser --no-reload
+	  AGENTS_SERVICE_TOKEN=$(AGENTS_SERVICE_TOKEN) CATALOG_URL=http://127.0.0.1:8136 \
+	  CATALOG_SERVICE_TOKEN=$(CATALOG_SERVICE_TOKEN) uv run langgraph dev --port 2024 --no-browser --no-reload
 dispatcher-dev:  ## the dispatcher, pointed at agents-dev (health on :8134)
-	cd services/dispatcher && PORT=8134 AGENTS_URL=http://127.0.0.1:2024 \
+	cd services/dispatcher && PORT=8134 AGENTS_URL=http://127.0.0.1:2024 AGENTS_SERVICE_TOKEN=$(AGENTS_SERVICE_TOKEN) \
 	  DATABASE_URL=postgresql://dispatcher_svc:local-dev-dispatcher@$(LOCAL_DB) uv run python -m gamenight_dispatcher
+catalog-dev:     ## the catalog's games API on :8136
+	PORT=8136 CATALOG_SERVICE_TOKEN=$(CATALOG_SERVICE_TOKEN) \
+	  CATALOG_DATABASE_URL=postgresql://catalog_svc:local-dev-catalog@$(LOCAL_DB) npm start -w @gamenight/catalog
 agents-test:     ## lint and unit-test the agent graphs
 	cd services/agents && uv run ruff check . && uv run pytest -q
 
@@ -100,6 +107,8 @@ security-docker:    ## hadolint over every Dockerfile
 images: $(SERVICES:%=image-%)   ## build every service image as $(IMAGE_PREFIX)-<service>:$(TAG)
 image-web:
 	docker build -t $(IMAGE_PREFIX)-web:$(TAG) -f apps/web/Dockerfile .
+image-catalog:
+	docker build -t $(IMAGE_PREFIX)-catalog:$(TAG) -f services/catalog/Dockerfile .
 image-%:
 	docker build -t $(IMAGE_PREFIX)-$*:$(TAG) services/$*
 # A service's directory, and its Grype exceptions file if it has one (each exception carries a reason).

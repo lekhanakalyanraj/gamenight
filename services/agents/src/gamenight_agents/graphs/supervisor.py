@@ -2,7 +2,7 @@
 
 - input kind "event": database events relayed by the dispatcher (for now, players joining),
   handled by the lobby handler, which posts a welcome line to the TV;
-- anything else: host chat, which becomes the host agent in PR 2b.
+- anything else: host chat with the host agent (gamenight_agents.host), streamed to the host's phone.
 
 The agents write to the game only through agents_api (see gamenight_agents.db).
 """
@@ -11,10 +11,11 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, MessagesState, StateGraph
 
 from gamenight_agents import db
+from gamenight_agents.host import host_agent
 from gamenight_agents.lobby import joined_names, welcome_line
 from gamenight_agents.models import host_model
 
@@ -44,8 +45,11 @@ async def lobby(state: RoomState) -> dict:
     return {"events": None, "kind": None}
 
 
-def host_chat(state: RoomState) -> dict:
-    return {"messages": [AIMessage("Host chat arrives with the host agent (slice 2, PR 2b).")]}
+async def host_chat(state: RoomState, config: RunnableConfig) -> dict:
+    """Runs the host agent on the chat so far; only its new messages are added to the room's chat."""
+    history = state.get("messages") or []
+    result = await host_agent().ainvoke({"messages": history}, config)
+    return {"messages": result["messages"][len(history):]}
 
 
 builder = StateGraph(RoomState)
