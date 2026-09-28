@@ -17,8 +17,8 @@ A multiplayer party-game platform: a **TV** hosts the room, players join from th
 | Slice | What | State |
 |---|---|---|
 | 0 | Monorepo, Supabase schema v0 with RLS tests, host and guest auth, Agent Server spike, CI | **done** |
-| 0.5 | Security pipeline: SAST, secrets, dependency and workflow scanning, database advisors | **in review** |
-| 1 | Rooms without AI: live lobby, TV view, join by QR | next |
+| 0.5 | Security pipeline: SAST, secrets, dependency and workflow scanning, database advisors | **done** |
+| 1 | Live rooms without AI: TV pairs by code, join by QR, live lobby with presence, host removes players | **in progress** (1a: live rooms) |
 | 2 | Dispatcher, supervisor, host chat, OpenTelemetry and LangSmith wiring | |
 | 3–7 | Undercover, narration, Quiz Night, Mafia, Heads Up | |
 | 8 | Eval suite, dashboards, load test | |
@@ -36,6 +36,8 @@ make agents-build agents-up       # Agent Server on http://localhost:8123
 make web                          # http://localhost:3100
 ```
 
+Open `http://localhost:3100/tv` as the TV, create a room from the host page on another browser (or a private window), and choose **Connect a TV**. To play with real phones on your Wi-Fi, run `make lan` instead of `make web`: it prints the address to open on the TV, and the join QR code points phones at your laptop.
+
 Sign in as the local demo host (`host@gamenight.test`, password in [supabase/seed.sql](supabase/seed.sql)), create a room, then join from another browser with the room code.
 
 ## Checks
@@ -44,6 +46,7 @@ Sign in as the local demo host (`host@gamenight.test`, password in [supabase/see
 make check        # pgTAP (RLS + RPCs), database advisors, web typecheck + lint, agent lint + tests
 make security     # gitleaks, Semgrep, OSV-Scanner, zizmor, actionlint (needs Docker and uv)
 make hooks        # install pre-commit hooks (gitleaks, ruff)
+npm run test:e2e -w @gamenight/web   # Playwright: a TV and five phones through a whole lobby (needs Supabase running)
 ```
 
 ## Security
