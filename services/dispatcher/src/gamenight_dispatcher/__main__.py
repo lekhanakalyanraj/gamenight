@@ -17,7 +17,10 @@ async def main() -> None:
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
-    await run(os.environ["DATABASE_URL"], AgentServer(os.environ["AGENTS_URL"]), stop)
+    # The Agent Server refuses callers without the internal service token (services/agents auth.py).
+    token = os.environ["AGENTS_SERVICE_TOKEN"]
+    agents = AgentServer(os.environ["AGENTS_URL"], headers={"x-gamenight-service-token": token})
+    await run(os.environ["DATABASE_URL"], agents, stop)
 
 
 if __name__ == "__main__":

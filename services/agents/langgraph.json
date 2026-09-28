@@ -1,7 +1,12 @@
 {
-  "dependencies": ["."],
+  "dependencies": [
+    "."
+  ],
   "graphs": {
     "supervisor": "./src/gamenight_agents/graphs/supervisor.py:graph"
   },
-  "python_version": "3.12"
+  "python_version": "3.12",
+  "auth": {
+    "path": "./src/gamenight_agents/auth.py:auth"
+  }
 }

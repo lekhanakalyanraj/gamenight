@@ -5,7 +5,7 @@ import pytest
 from gamenight_agents import db
 from gamenight_agents.graphs import supervisor
 from gamenight_agents.graphs.supervisor import graph, route
-from gamenight_agents.models import FAKE_WELCOME
+from gamenight_agents.models import FAKE_CHAT_REPLY, FAKE_WELCOME
 
 
 @pytest.fixture(autouse=True)
@@ -55,6 +55,11 @@ def test_no_welcome_once_the_room_is_playing(fake_db, monkeypatch):
     assert fake_db == []
 
 
-def test_host_chat_is_a_placeholder_until_the_host_agent_lands():
-    result = asyncio.run(supervisor.graph.ainvoke({"messages": [("user", "hi")]}))
-    assert "PR 2b" in result["messages"][-1].content
+def test_host_chat_runs_the_host_agent_and_keeps_the_conversation(monkeypatch):
+    from gamenight_agents import host
+
+    host.host_agent.cache_clear()
+    config = {"configurable": {"thread_id": "r1"}}
+    result = asyncio.run(supervisor.graph.ainvoke({"messages": [("user", "What should we play?")]}, config))
+    assert [m.type for m in result["messages"]] == ["human", "ai"]
+    assert result["messages"][-1].content == FAKE_CHAT_REPLY

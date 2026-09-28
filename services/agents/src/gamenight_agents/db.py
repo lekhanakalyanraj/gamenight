@@ -23,3 +23,10 @@ async def host_say(room_id: str, text: str, kind: str, event_id: str | None = No
         )
         row = await cur.fetchone()
     return row[0] if isinstance(row[0], dict) else json.loads(row[0])
+
+
+async def is_room_host(room_id: str, user_id: str) -> bool:
+    async with await psycopg.AsyncConnection.connect(database_url(), autocommit=True) as conn:
+        cur = await conn.execute("select agents_api.is_room_host(%s, %s)", (room_id, user_id))
+        row = await cur.fetchone()
+    return bool(row and row[0])
