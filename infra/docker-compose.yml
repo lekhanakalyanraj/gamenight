@@ -1,0 +1,45 @@
+# Agent services for local development. Supabase runs separately via `npx supabase start`
+# (the Makefile starts both). Run from the repo root: docker compose -f infra/docker-compose.yml --env-file .env up -d
+name: gamenight
+
+services:
+  agent-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: langgraph
+    volumes:
+      - agent-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d langgraph"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  agent-server:
+    image: gamenight-agents:dev
+    ports:
+      - "8123:8000"
+    depends_on:
+      agent-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URI: postgres://postgres:postgres@agent-postgres:5432/langgraph?sslmode=disable
+      REDIS_URI: redis://redis:6379
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Deliberately no LANGGRAPH_CLOUD_LICENSE_KEY: slice 0 checks whether the server runs without one.
+
+volumes:
+  agent-pg:

@@ -1,0 +1,16 @@
+node_modules/
+.next/
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+supabase/.branches
+supabase/.temp
+.langgraph_api/
+test-results/
+playwright-report/
+.DS_Store

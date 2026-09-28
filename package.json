@@ -1,0 +1,15 @@
+{
+  "name": "gamenight",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:test": "supabase test db",
+    "db:types": "supabase gen types typescript --local > packages/db-types/src/database.ts"
+  },
+  "devDependencies": {
+    "supabase": "^2.50.0"
+  }
+}

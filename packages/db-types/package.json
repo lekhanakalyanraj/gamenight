@@ -1,0 +1,8 @@
+{
+  "name": "@gamenight/db-types",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TypeScript types generated from the Supabase schema. Regenerate with `npm run db:types` at the repo root.",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

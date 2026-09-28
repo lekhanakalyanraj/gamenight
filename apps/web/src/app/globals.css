@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+/* gamenight is a night-time, big-screen app: a deliberate dark theme with a warm lamp-light accent. */
+:root {
+  --background: #12121f;
+  --surface: #1c1c30;
+  --surface-2: #26263f;
+  --border: #34345a;
+  --foreground: #f4f1ea;
+  --muted: #a9a7bd;
+  --accent: #ffb347;
+  --accent-ink: #1a1206;
+  --danger: #ff6b6b;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
