@@ -1,0 +1,67 @@
+name: evals
+
+# Tier 1 evals: the real host agent (Haiku) against the golden cases and a promptfoo red team mapped to
+# the OWASP Top 10 for LLM Applications and for Agentic Applications. Runs when the agents change, or on
+# demand. Report-only until slice 3: low scores don't fail the job, but a broken harness does.
+# The Anthropic key lives in the `evals` environment (its own workspace, $10/month limit) and is never
+# given to pull requests from forks.
+
+on:
+  pull_request:
+    paths: ["services/agents/**", ".github/workflows/evals.yml"]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tier1:
+    name: tier 1 (golden evals + red team, report-only)
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: evals
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: services/agents
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # Attack data goes only to our model provider: no promptfoo cloud generation, telemetry or updates.
+      PROMPTFOO_DISABLE_TELEMETRY: "1"
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: "true"
+      PROMPTFOO_DISABLE_UPDATE: "1"
+      PROMPTFOO_FAILED_TEST_EXIT_CODE: "0" # report-only; errors still fail the step
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - run: uv sync --frozen
+
+      - name: Golden evals (28 cases, Haiku judge)
+        run: uv run python -m evals.run_golden --out golden-results.json
+
+      - name: Red team (promptfoo)
+        run: |
+          PROMPTFOO_PYTHON="$PWD/.venv/bin/python" \
+            npx -y promptfoo@0.123.1 redteam run -c evals/redteam/promptfooconfig.yaml --no-cache \
+            -o evals/redteam/redteam-results.json
+          uv run python -m evals.summarise_redteam evals/redteam/redteam-results.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evals-tier1
+          path: |
+            services/agents/golden-results.json
+            services/agents/evals/redteam/redteam-results.json
+          retention-days: 30

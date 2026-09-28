@@ -90,6 +90,7 @@ Every PR runs the checks below; they also run daily on main, so newly disclosed 
 | Service isolation | pgTAP | Each service's database role reaches only its own schema; none can call privileged functions |
 | Images | hadolint, Grype | Non-root, pinned base images; no fixable high or critical vulnerabilities (exceptions need a reason) |
 | Headers and CSP | Playwright, OWASP ZAP (nightly) | Per-request CSP nonces, no violations, clickjacking and sniffing protection |
+| AI behaviour | Golden evals, promptfoo red team (OWASP LLM + Agentic), tier 0 tests | Prompt injection, secret and prompt leaks, tool misuse, off-rating content, staying in role |
 | CI itself | zizmor, actionlint, OpenSSF Scorecard | Actions pinned by SHA, least-privilege tokens, no script injection |
 
 ## Images and releases
@@ -102,7 +103,18 @@ gh attestation verify oci://ghcr.io/lekhanakalyanraj/gamenight-web:main --owner 
 
 Configuration is read at runtime (`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, optional `SUPABASE_BROWSER_URL` and `PUBLIC_ORIGIN`), so one image runs in any environment. A `v*` tag also creates a GitHub Release with every SBOM.
 
-Coming with the agent slices: LLM and agent red teaming mapped to the OWASP Top 10 for LLM Applications (2026) and for Agentic Applications, and eval gates on every agent change.
+### AI evals and red teaming
+
+Every change to the agents runs **tier 1** (`.github/workflows/evals.yml`) against the real model, on its own Anthropic key with a $10/month limit:
+
+- **Golden evals:** 28 cases, covering game suggestions, rules, staying in role, and malicious nicknames in lobby welcomes. Each is scored by hard checks plus a Haiku judge.
+- **Red team:** a promptfoo run against host chat. It uses the plugins that generate locally plus gamenight's own attacks, each mapped to the OWASP Top 10 for LLM Applications (2026) and for Agentic Applications. promptfoo's cloud generation and telemetry are off, so attack data goes only to our model provider.
+
+Results appear in the job summary. **Tier 0** (every PR) tests the agents and the harness with a scripted model. Tier 1 is report-only until games with secrets arrive, when a leaked secret will fail the build.
+
+```bash
+cd services/agents && uv run python -m evals.run_golden          # needs ANTHROPIC_API_KEY
+```
 
 ## Layout
 

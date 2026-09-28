@@ -33,3 +33,7 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+# The eval harness (evals/) is imported by its tests.
+pythonpath = ["."]
