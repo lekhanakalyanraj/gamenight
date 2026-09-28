@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { ButtonLink, Page } from "@/components/ui";
 
 export default function Home() {
@@ -15,6 +17,10 @@ export default function Home() {
           <ButtonLink href="/join">Join a game</ButtonLink>
           <ButtonLink href="/host" variant="secondary">Host a game night</ButtonLink>
         </div>
+        <p className="text-sm text-muted">
+          Setting up the big screen? Open <Link href="/tv" className="text-accent underline-offset-4 hover:underline">/tv</Link> on
+          the TV and connect it from the host&apos;s phone.
+        </p>
       </div>
     </Page>
   );

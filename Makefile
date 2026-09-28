@@ -13,7 +13,7 @@ SCAN = docker run --rm -v "$(CURDIR)":/src -w /src \
        -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src
 
 .PHONY: help up down db-start db-stop db-reset db-test db-types db-advisors agents-build agents-up agents-down \
-        agents-logs agents-test web web-check check security security-secrets security-sast security-deps \
+        agents-logs agents-test web lan web-check check security security-secrets security-sast security-deps \
         security-workflows hooks
 
 help:            ## list commands
@@ -48,6 +48,12 @@ agents-test:     ## lint and unit-test the agent graphs
 
 web:             ## Next.js dev server on http://localhost:3100
 	npm run dev -w @gamenight/web
+lan:             ## dev server for real phones on your Wi-Fi (join QR and Supabase use the laptop's address)
+	@ip=$$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $$1}'); \
+	test -n "$$ip" || { echo "Couldn't find this machine's Wi-Fi address."; exit 1; }; \
+	echo "TV: http://$$ip:3100/tv    Phones: scan the QR on the TV"; \
+	LAN_HOST=$$ip PUBLIC_ORIGIN=http://$$ip:3100 NEXT_PUBLIC_SUPABASE_URL=http://$$ip:55421 \
+	  npm run dev -w @gamenight/web -- -H 0.0.0.0
 web-check:       ## typecheck and lint the web app
 	npm run typecheck -w @gamenight/web && npm run lint -w @gamenight/web
 

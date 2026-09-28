@@ -49,7 +49,8 @@ select is((select count(*)::int from public.room_members), 2, 'members see every
 select pg_temp.act_as('00000000-0000-0000-0000-000000000102', true);
 select throws_ok(format($$ select public.join_room(%L, ' riya ') $$, (select code from r)), '23505', null,
                  'nicknames are unique per room, ignoring case and spaces');
-select throws_ok($$ select public.join_room('ZZZZZZ', 'Mei') $$, 'P0002', null, 'unknown codes are rejected');
+select is((select id from public.join_room('ZZZZZZ', 'Mei')), null,
+          'unknown codes find no room (and count as a miss; see live_rooms.test.sql)');
 select lives_ok(format($$ select public.join_room(lower(%L), 'Mei') $$, (select code from r)),
                 'codes are case-insensitive');
 
@@ -65,7 +66,8 @@ begin
   end loop;
 end $$;
 select pg_temp.fill((select code from r), 15);  -- host + Riya + Mei + 13 more = 16
-select is((select count(*)::int from public.room_members where left_at is null), 16, 'the room holds 16 players');
+select is((select count(*)::int from public.room_members where room_id = (select id from r) and left_at is null), 16,
+          'the room holds 16 players');
 select pg_temp.act_as('00000000-0000-0000-0000-000000000117', true);
 select throws_ok(format($$ select public.join_room(%L, 'late') $$, (select code from r)), '53400', null,
                  'the 17th player is turned away');
@@ -74,12 +76,12 @@ select throws_ok(format($$ select public.join_room(%L, 'late') $$, (select code 
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
 select is((select count(*)::int from public.rooms), 0, 'outsiders cannot see a room they are not in');
 select is((select count(*)::int from public.room_members), 0, 'outsiders cannot see its members');
-select ok(not private.can_access_room_topic('room:' || (select id from r)::text),
+select ok(not private.can_access_topic('room:' || (select id from r)::text),
           'outsiders cannot subscribe to the room''s realtime topic');
-select ok(not private.can_access_room_topic('room:not-a-uuid'), 'malformed topics are refused');
+select ok(not private.can_access_topic('room:not-a-uuid'), 'malformed topics are refused');
 
 select pg_temp.act_as('00000000-0000-0000-0000-000000000101', true);
-select ok(private.can_access_room_topic('room:' || (select id from r)::text), 'members can subscribe to their room''s topic');
+select ok(private.can_access_topic('room:' || (select id from r)::text), 'members can subscribe to their room''s topic');
 
 -- ---- adult rooms ---------------------------------------------------------------------
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');

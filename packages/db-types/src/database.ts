@@ -23,7 +23,20 @@ export type Database = {
           }
         },"public": {
           Tables: {
-            "profiles": {
+            "display_pairings": {
+                  Row: {
+                    "code": string,"expires_at": string,"user_id": string
+                  }
+                  Insert: {
+                    "code": string,"expires_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "code"?: string,"expires_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"profiles": {
                   Row: {
                     "created_at": string,"display_name": string,"id": string
                   }
@@ -36,15 +49,34 @@ export type Database = {
                   Relationships: [
                     
                   ]
-                },"room_members": {
+                },"room_displays": {
                   Row: {
-                    "adult_confirmed": boolean,"id": string,"joined_at": string,"left_at": string | null,"nickname": string,"role": Database["public"]['Enums']["member_role"],"room_id": string,"user_id": string
+                    "id": string,"paired_at": string,"room_id": string,"user_id": string
                   }
                   Insert: {
-                    "adult_confirmed"?: boolean,"id"?: string,"joined_at"?: string,"left_at"?: string | null,"nickname": string,"role"?: Database["public"]['Enums']["member_role"],"room_id": string,"user_id": string
+                    "id"?: string,"paired_at"?: string,"room_id": string,"user_id": string
                   }
                   Update: {
-                    "adult_confirmed"?: boolean,"id"?: string,"joined_at"?: string,"left_at"?: string | null,"nickname"?: string,"role"?: Database["public"]['Enums']["member_role"],"room_id"?: string,"user_id"?: string
+                    "id"?: string,"paired_at"?: string,"room_id"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "room_displays_room_id_fkey"
+      columns: ["room_id"]
+isOneToOne: false
+      referencedRelation: "rooms"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"room_members": {
+                  Row: {
+                    "adult_confirmed": boolean,"id": string,"joined_at": string,"left_at": string | null,"nickname": string,"removed_by_host": boolean,"role": Database["public"]['Enums']["member_role"],"room_id": string,"user_id": string
+                  }
+                  Insert: {
+                    "adult_confirmed"?: boolean,"id"?: string,"joined_at"?: string,"left_at"?: string | null,"nickname": string,"removed_by_host"?: boolean,"role"?: Database["public"]['Enums']["member_role"],"room_id": string,"user_id": string
+                  }
+                  Update: {
+                    "adult_confirmed"?: boolean,"id"?: string,"joined_at"?: string,"left_at"?: string | null,"nickname"?: string,"removed_by_host"?: boolean,"role"?: Database["public"]['Enums']["member_role"],"room_id"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -101,6 +133,7 @@ isOneToOne: false
 "joined_at": string,
 "left_at": string | null,
 "nickname": string,
+"removed_by_host": boolean,
 "role": Database["public"]['Enums']["member_role"],
 "room_id": string,
 "user_id": string
@@ -111,10 +144,32 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"kick_member":
+{ Args: { "p_member_id": string }; Returns: undefined
+                           },
 "leave_room":
 { Args: { "p_room_id": string }; Returns: undefined
                            },
 "new_room_code":
+{ Args: Record<PropertyKey, never>; Returns: string
+                           },
+"pair_display":
+{ Args: { "p_code": string,"p_room_id": string }; Returns: {
+              "id": string,
+"paired_at": string,
+"room_id": string,
+"user_id": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "room_displays"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"remove_display":
+{ Args: { "p_display_id": string }; Returns: undefined
+                           },
+"start_display_pairing":
 { Args: Record<PropertyKey, never>; Returns: string
                            }
           }

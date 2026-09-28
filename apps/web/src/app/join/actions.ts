@@ -21,11 +21,13 @@ export async function joinRoom(_: FormState, form: FormData): Promise<FormState>
     if (error) return { error: "Couldn't start a guest session. Please try again.", values };
   }
 
-  const { error } = await supabase.rpc("join_room", {
+  const { data, error } = await supabase.rpc("join_room", {
     p_code: code,
     p_nickname: name,
     p_confirm_adult: form.get("confirm_adult") === "on",
   });
   if (error) return { error: friendlyError(error), values };
+  // An unknown code comes back empty rather than as an error, so the database can count the miss.
+  if (!data?.id) return { error: "There is no open room with that code.", values };
   redirect(`/play/${code}`);
 }
