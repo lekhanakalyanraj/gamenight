@@ -1,0 +1,22 @@
+rules:
+  - id: gamenight.no-dangerously-set-inner-html
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      Render text, never raw HTML. Narration, clues and nicknames come from models and players,
+      so HTML here is an XSS path (OWASP LLM10, improper output handling).
+    pattern-either:
+      - pattern: <$EL dangerouslySetInnerHTML={$HTML} />
+      - pattern: <$EL dangerouslySetInnerHTML={$HTML}>...</$EL>
+
+  - id: gamenight.writes-go-through-rpc
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      Write through an RPC (supabase.rpc(...)), not directly to a table. Tables are read-only
+      under RLS; RPCs are where the game rules are checked.
+    pattern-either:
+      - pattern: $DB.from(...).insert(...)
+      - pattern: $DB.from(...).update(...)
+      - pattern: $DB.from(...).upsert(...)
+      - pattern: $DB.from(...).delete(...)
