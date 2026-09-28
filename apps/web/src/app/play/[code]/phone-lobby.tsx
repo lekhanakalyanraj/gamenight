@@ -16,6 +16,7 @@ import {
 import type { FormState } from "@/lib/validate";
 
 import { kickMember, leaveRoom, pairDisplay, removeDisplay } from "./actions";
+import { HostChat } from "./host-chat";
 
 type Lobby = { room: LobbyRoom; members: LobbyMember[]; displays: LobbyDisplay[]; hostLines: LobbyHostLine[] };
 
@@ -61,6 +62,8 @@ export function PhoneLobby({ lobby, meId, isHost }: { lobby: Lobby; meId: string
       </header>
 
       <HostCaption text={latestHostLine(live.hostLines)?.text ?? null} />
+
+      {isHost ? <HostChat roomId={live.room.id} /> : null}
 
       {isHost ? <TvPanel roomId={live.room.id} displays={live.displays} tvOnline={live.tvOnline} /> : null}
 

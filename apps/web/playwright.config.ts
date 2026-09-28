@@ -17,8 +17,8 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  // The web app plus the event path: agents (LangGraph's in-memory dev server with the free scripted
-  // model) and the dispatcher, all against the local Supabase. Locally, running ones are reused.
+  // The web app plus the agent path: agents (LangGraph's in-memory dev server with the free scripted
+  // model), the catalog and the dispatcher, all against the local Supabase. Locally, running ones are reused.
   webServer: [
     {
       command: process.env.CI ? "npm run start" : "npm run dev",
@@ -33,6 +33,13 @@ export default defineConfig({
       env: { GAMENIGHT_MODEL: "fake" },
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
+    },
+    {
+      command: "make catalog-dev",
+      cwd: "../..",
+      url: "http://127.0.0.1:8136/healthz",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
     },
     {
       command: "make dispatcher-dev",

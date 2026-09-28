@@ -22,3 +22,11 @@ export function serverEnv() {
     browserSupabaseUrl: process.env.SUPABASE_BROWSER_URL || supabaseUrl,
   };
 }
+
+/** How the web server reaches the (private) Agent Server, and the internal token it must send. */
+export function agentsEnv() {
+  return {
+    url: (process.env.AGENTS_URL || "http://127.0.0.1:2024").replace(/\/+$/, ""),
+    serviceToken: required("AGENTS_SERVICE_TOKEN"),
+  };
+}
