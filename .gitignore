@@ -15,3 +15,6 @@ test-results/
 playwright-report/
 .DS_Store
 .zap/report/
+services/agents/evals/redteam/redteam.yaml
+services/agents/evals/redteam/*-results.json
+golden-results.json
