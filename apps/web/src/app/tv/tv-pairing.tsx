@@ -4,12 +4,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useDisplayEvents } from "@/lib/realtime";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/lib/supabase/client";
 
 const NEW_CODE_EVERY_MS = 9 * 60 * 1000; // codes expire after 10 minutes
 const CHECK_PAIRED_EVERY_MS = 4000; // backup for a "paired" broadcast missed while reconnecting
 
-type Supabase = ReturnType<typeof createClient>;
+type Supabase = ReturnType<typeof useSupabase>;
 type Started = { uid: string; pairedRoom: string | null; code: string | null } | { error: string };
 
 async function pairedRoomCode(supabase: Supabase, uid: string): Promise<string | null> {
@@ -50,11 +50,11 @@ export function TvPairing() {
   const [userId, setUserId] = useState<string | null>(null);
   const [code, setCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const supabase = useSupabase();
 
   useDisplayEvents(userId, { onPaired: (roomCode) => router.replace(`/tv/${roomCode}`) });
 
   useEffect(() => {
-    const supabase = createClient();
     let cancelled = false;
     const timers: ReturnType<typeof setInterval>[] = [];
 
@@ -89,7 +89,7 @@ export function TvPairing() {
       cancelled = true;
       timers.forEach(clearInterval);
     };
-  }, [router]);
+  }, [router, supabase]);
 
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-10 p-10 text-center">

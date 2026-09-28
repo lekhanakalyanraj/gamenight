@@ -4,11 +4,12 @@ import type { Database } from "@gamenight/db-types";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-import { env } from "@/lib/env";
+import { serverEnv } from "@/lib/env";
 
 /** A Supabase client for Server Components, Server Actions and Route Handlers, acting as the signed-in user. */
 export async function createClient() {
   const cookieStore = await cookies();
+  const env = serverEnv();
   return createServerClient<Database>(env.supabaseUrl, env.supabaseKey, {
     cookies: {
       getAll() {

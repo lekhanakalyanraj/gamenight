@@ -1,12 +1,24 @@
-function required(name: string, value: string | undefined): string {
+import "server-only";
+
+function required(name: string): string {
+  const value = process.env[name];
   if (!value) {
     throw new Error(`Missing ${name}. Copy apps/web/.env.example to .env.local and fill it in.`);
   }
   return value;
 }
 
-// Referenced directly (not through process.env[name]) so Next.js can inline them into the browser bundle.
-export const env = {
-  supabaseUrl: required("NEXT_PUBLIC_SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL),
-  supabaseKey: required("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY),
-};
+/**
+ * Configuration read at request time, never baked in at build time, so one image runs in any
+ * environment. The browser gets its values from the root layout (see lib/supabase/client.tsx).
+ */
+export function serverEnv() {
+  const supabaseUrl = required("SUPABASE_URL");
+  return {
+    /** How this server reaches Supabase. */
+    supabaseUrl,
+    supabaseKey: required("SUPABASE_PUBLISHABLE_KEY"),
+    /** How browsers reach Supabase, when that differs (e.g. phones on the Wi-Fi via `make lan`). */
+    browserSupabaseUrl: process.env.SUPABASE_BROWSER_URL || supabaseUrl,
+  };
+}
