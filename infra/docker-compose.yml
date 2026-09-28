@@ -1,8 +1,70 @@
-# Agent services for local development. Supabase runs separately via `npx supabase start`
-# (the Makefile starts both). Run from the repo root: docker compose -f infra/docker-compose.yml --env-file .env up -d
+# Every gamenight service, run locally. Supabase runs separately via its CLI (`make db-start`).
+# Build images with `make images`, then: docker compose -f infra/docker-compose.yml --env-file .env up -d
+# Each service gets its own image, a health check, a non-root user and a read-only filesystem.
 name: gamenight
 
+x-hardened: &hardened
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  restart: unless-stopped
+
 services:
+  web:
+    <<: *hardened
+    image: gamenight-web:dev
+    build: { context: .., dockerfile: apps/web/Dockerfile }
+    ports: ["3200:3100"]
+    tmpfs: [/tmp, /app/apps/web/.next/cache]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    environment:
+      # The server reaches Supabase through the host; browsers use localhost.
+      SUPABASE_URL: http://host.docker.internal:55421
+      SUPABASE_BROWSER_URL: http://localhost:55421
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+      PUBLIC_ORIGIN: http://localhost:3200
+
+  agent-server:
+    image: gamenight-agents:dev
+    build: { context: ../services/agents }
+    ports: ["8123:8000"]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    depends_on:
+      agent-postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      DATABASE_URI: postgres://postgres:postgres@agent-postgres:5432/langgraph?sslmode=disable
+      REDIS_URI: redis://redis:6379
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # No LANGGRAPH_CLOUD_LICENSE_KEY: locally the server runs with a LangSmith key alone.
+      # Production needs a licence key.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ok', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 10
+
+  dispatcher:
+    <<: *hardened
+    image: gamenight-dispatcher:dev
+    build: { context: ../services/dispatcher }
+    ports: ["8124:8080"]
+
+  voice:
+    <<: *hardened
+    image: gamenight-voice:dev
+    build: { context: ../services/voice }
+    ports: ["8125:8080"]
+
+  catalog:
+    <<: *hardened
+    image: gamenight-catalog:dev
+    build: { context: ../services/catalog }
+    ports: ["8126:8080"]
+
   agent-postgres:
     image: postgres:16
     environment:
@@ -24,23 +86,6 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
-
-  agent-server:
-    image: gamenight-agents:dev
-    ports:
-      - "8123:8000"
-    depends_on:
-      agent-postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      DATABASE_URI: postgres://postgres:postgres@agent-postgres:5432/langgraph?sslmode=disable
-      REDIS_URI: redis://redis:6379
-      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      # No LANGGRAPH_CLOUD_LICENSE_KEY: locally the server runs with a LangSmith key alone.
-      # Production needs a licence key.
 
 volumes:
   agent-pg:

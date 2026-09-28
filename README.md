@@ -18,10 +18,34 @@ A multiplayer party-game platform: a **TV** hosts the room, players join from th
 |---|---|---|
 | 0 | Monorepo, Supabase schema v0 with RLS tests, host and guest auth, Agent Server spike, CI | **done** |
 | 0.5 | Security pipeline: SAST, secrets, dependency and workflow scanning, database advisors | **done** |
-| 1 | Live rooms without AI: TV pairs by code, join by QR, live lobby with presence, host removes players | **in progress** (1a: live rooms) |
+| 1 | Live rooms without AI: TV pairs by code, join by QR, live lobby with presence, host removes players; every service as a signed, scanned image | **in review** (1a merged; 1b: images, release, CSP, ZAP) |
 | 2 | Dispatcher, supervisor, host chat, OpenTelemetry and LangSmith wiring | |
 | 3–7 | Undercover, narration, Quiz Night, Mafia, Heads Up | |
 | 8 | Eval suite, dashboards, load test | |
+
+## Services
+
+Five services, each with its own image, health check, database schema and login; they share one Supabase database but can only reach their own tables (tested in `supabase/tests/database/services.test.sql`).
+
+```mermaid
+flowchart LR
+  TV["TV"] & Phone["Phones"] --> WEB["web · Next.js"]
+  TV & Phone -- "Realtime" --> SB[("Supabase<br/>Postgres · Auth · Realtime")]
+  WEB -- "RPC as the player" --> SB
+  WEB -- "host chat" --> AG["agents · LangGraph Agent Server"]
+  SB -- "outbox events" --> DSP["dispatcher"] --> AG
+  AG -- "gm_* RPCs" --> SB
+  SB -- "narration jobs" --> VOICE["voice"]
+  EXT["other AI agents"] -- "MCP" --> CAT["catalog"]
+```
+
+| Service | Runtime | Status | Owns |
+|---|---|---|---|
+| web | Next.js 16 | live: TV, phones, host | nothing: every write is an RPC as the signed-in user |
+| agents | LangGraph Agent Server (Python) | skeleton graph | agent threads (its own Postgres) |
+| dispatcher | Python | health only (outbox consumer in slice 2) | `dispatch` schema |
+| voice | Python, FastAPI | health only (narration audio in slice 4) | `narration` schema |
+| catalog | TypeScript | health only (catalogue API + MCP server in slice 9) | `catalog` schema |
 
 ## Run it locally
 
@@ -32,9 +56,10 @@ npm install                       # web app + Supabase CLI
 cp .env.example .env              # add ANTHROPIC_API_KEY and LANGSMITH_API_KEY
 make db-start                     # Supabase on ports 55421-55429 (Studio: http://127.0.0.1:55423)
 cp apps/web/.env.example apps/web/.env.local   # publishable key from `npx supabase status -o env`
-make agents-build agents-up       # Agent Server on http://localhost:8123
-make web                          # http://localhost:3100
+make web                          # http://localhost:3100 (dev server)
 ```
+
+To run every service in Docker instead (the same images CI publishes): `make images services-up`. That serves web on http://localhost:3200, the Agent Server on :8123, and dispatcher, voice and catalog health on :8124-8126.
 
 Open `http://localhost:3100/tv` as the TV, create a room from the host page on another browser (or a private window), and choose **Connect a TV**. To play with real phones on your Wi-Fi, run `make lan` instead of `make web`: it prints the address to open on the TV, and the join QR code points phones at your laptop.
 
@@ -43,8 +68,10 @@ Sign in as the local demo host (`host@gamenight.test`, password in [supabase/see
 ## Checks
 
 ```bash
-make check        # pgTAP (RLS + RPCs), database advisors, web typecheck + lint, agent lint + tests
-make security     # gitleaks, Semgrep, OSV-Scanner, zizmor, actionlint (needs Docker and uv)
+make check        # pgTAP (RLS, RPCs, service isolation), database advisors, web typecheck + lint, every service's tests
+make security     # gitleaks, Semgrep, OSV-Scanner, zizmor, actionlint, hadolint (needs Docker and uv)
+make images       # build every service image; make scan-<service> runs Grype on one
+make dast         # OWASP ZAP baseline against a running web app (DAST_TARGET=...)
 make hooks        # install pre-commit hooks (gitleaks, ruff)
 npm run test:e2e -w @gamenight/web   # Playwright: a TV and five phones through a whole lobby (needs Supabase running)
 ```
@@ -60,7 +87,20 @@ Every PR runs the checks below; they also run daily on main, so newly disclosed 
 | Static analysis | Semgrep (community + [custom rules](.semgrep/)), CodeQL | Injection, XSS, and repo rules: no RLS-bypass key, no raw HTML, writes only through RPCs |
 | Secrets | gitleaks | Keys in any commit, ever |
 | Dependencies | OSV-Scanner, dependency review, Dependabot | Known vulnerabilities in npm and PyPI packages; licences of new ones |
+| Service isolation | pgTAP | Each service's database role reaches only its own schema; none can call privileged functions |
+| Images | hadolint, Grype | Non-root, pinned base images; no fixable high or critical vulnerabilities (exceptions need a reason) |
+| Headers and CSP | Playwright, OWASP ZAP (nightly) | Per-request CSP nonces, no violations, clickjacking and sniffing protection |
 | CI itself | zizmor, actionlint, OpenSSF Scorecard | Actions pinned by SHA, least-privilege tokens, no script injection |
+
+## Images and releases
+
+Every merge to `main` publishes each service to `ghcr.io/lekhanakalyanraj/gamenight-<service>`, but only if its Grype scan passes, with an SBOM and signed build provenance. Verify any image:
+
+```bash
+gh attestation verify oci://ghcr.io/lekhanakalyanraj/gamenight-web:main --owner lekhanakalyanraj
+```
+
+Configuration is read at runtime (`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, optional `SUPABASE_BROWSER_URL` and `PUBLIC_ORIGIN`), so one image runs in any environment. A `v*` tag also creates a GitHub Release with every SBOM.
 
 Coming with the agent slices: LLM and agent red teaming mapped to the OWASP Top 10 for LLM Applications (2026) and for Agentic Applications, and eval gates on every agent change.
 
@@ -69,10 +109,14 @@ Coming with the agent slices: LLM and agent red teaming mapped to the OWASP Top 
 ```
 apps/web/              Next.js app
 packages/db-types/     TypeScript types generated from the schema (make db-types)
-services/agents/       LangGraph graphs and the Agent Server config
+services/agents/       LangGraph graphs, the Agent Server config and image
+services/dispatcher/   outbox consumer and timers (skeleton)
+services/voice/        narration audio (skeleton)
+services/catalog/      game catalogue API and MCP server (skeleton)
 supabase/migrations/   schema, RLS policies, RPCs, realtime triggers
 supabase/tests/        pgTAP tests
-infra/                 docker-compose for the agent services
+infra/                 docker-compose for every service
+.zap/                  OWASP ZAP rules, with a reason for each accepted finding
 scripts/               repo tooling (database advisors)
 .semgrep/              custom Semgrep rules, each with test cases
 ```

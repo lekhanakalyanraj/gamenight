@@ -1,0 +1,47 @@
+name: dast
+
+# Nightly OWASP ZAP baseline (passive) scan of the web image, running against a local Supabase.
+# Any warning not accepted in .zap/rules.tsv fails the run. Also runs on demand.
+
+on:
+  schedule:
+    - cron: "43 2 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  zap:
+    name: zap baseline (web)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Start Supabase (auth, REST and Realtime)
+        run: npx supabase start -x studio,imgproxy,mailpit,storage-api,postgres-meta,edge-runtime,logflare,vector,supavisor
+      - name: Build the web image, exactly as release does
+        run: make image-web
+      - name: Run it
+        run: |
+          key="$(npx supabase status -o env | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$/\1/p')"
+          docker run -d --name web --network host \
+            -e SUPABASE_URL=http://127.0.0.1:55421 -e SUPABASE_PUBLISHABLE_KEY="$key" gamenight-web:dev
+          for _ in $(seq 1 30); do curl -fs http://localhost:3100/healthz && exit 0; sleep 2; done
+          docker logs web
+          exit 1
+      - name: ZAP baseline scan
+        run: make dast DAST_TARGET=http://localhost:3100 DAST_DOCKER_ARGS="--network host"
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: zap-report
+          path: .zap/report
+          retention-days: 14

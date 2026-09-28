@@ -1,0 +1,16 @@
+{
+  "name": "@gamenight/catalog",
+  "version": "0.1.0",
+  "private": true,
+  "description": "gamenight's catalog: the game catalogue API and MCP server (slice 9).",
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/main.ts",
+    "test": "node --experimental-strip-types --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "typescript": "^7"
+  }
+}

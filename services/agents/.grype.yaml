@@ -1,0 +1,10 @@
+# Vulnerabilities we accept in this image, each with its reason. `make scan-agents` (and the release
+# workflow) fails on any other fixable high or critical finding. Review when LangChain publishes a new
+# langgraph-api base image; Dependabot proposes those digest updates weekly.
+ignore:
+  - vulnerability: CVE-2026-82049
+    package:
+      name: python
+    reason: >-
+      CPython 3.12 in LangChain's langgraph-api base image; the fix exists only in 3.14. The flaw is in
+      tarfile's extraction filters, and the agents never extract archives. Reviewed 28 Sep 2026.
