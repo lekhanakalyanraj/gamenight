@@ -73,3 +73,7 @@ infra/                 docker-compose for the agent services
 scripts/               repo tooling (database advisors)
 .semgrep/              custom Semgrep rules, each with test cases
 ```
+
+## Licence
+
+[MIT](LICENSE)
