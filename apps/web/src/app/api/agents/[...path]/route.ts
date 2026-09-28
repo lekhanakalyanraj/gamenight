@@ -1,3 +1,4 @@
+import { context, propagation, SpanKind, trace } from "@opentelemetry/api";
 import type { NextRequest } from "next/server";
 
 import { allowedThread, sanitizeRunRequest } from "@/lib/agents-proxy";
@@ -28,10 +29,21 @@ async function proxy(request: NextRequest, { params }: RouteContext<"/api/agents
     .maybeSingle();
   if (!room) return Response.json({ error: "only the room's host can chat with its AI host" }, { status: 403 });
 
+  // A CLIENT span for the call to the Agent Server; the run continues its trace (web → agents).
+  const span = trace.getTracer("gamenight.web").startSpan(`agents ${request.method} ${path.replace(/[0-9a-f-]{36}/g, "{id}")}`, {
+    kind: SpanKind.CLIENT,
+  });
+  const spanContext = trace.setSpan(context.active(), span);
+
   let body: string | undefined;
   if (path.endsWith("/runs/stream")) {
-    const run = sanitizeRunRequest(await request.json().catch(() => null));
-    if (!run) return Response.json({ error: "send one message of up to 1000 characters" }, { status: 400 });
+    const carrier: Record<string, string> = {};
+    propagation.inject(spanContext, carrier); // empty when tracing is off
+    const run = sanitizeRunRequest(await request.json().catch(() => null), carrier.traceparent);
+    if (!run) {
+      span.end();
+      return Response.json({ error: "send one message of up to 1000 characters" }, { status: 400 });
+    }
     body = JSON.stringify(run);
   } else if (request.method !== "GET") {
     body = await request.text();
@@ -52,12 +64,11 @@ async function proxy(request: NextRequest, { params }: RouteContext<"/api/agents
     body: JSON.stringify({ thread_id: roomId, if_exists: "do_nothing", metadata: { room_id: roomId } }),
   });
 
-  const upstream = await fetch(`${agents.url}/${path}${request.nextUrl.search}`, {
-    method: request.method,
-    headers,
-    body,
-    signal: request.signal,
-  });
+  const upstream = await context.with(spanContext, () =>
+    fetch(`${agents.url}/${path}${request.nextUrl.search}`, { method: request.method, headers, body, signal: request.signal }),
+  );
+  span.setAttribute("http.response.status_code", upstream.status);
+  span.end();
   // Pass the stream straight through: no buffering, so tokens reach the phone as they're generated.
   const passthrough = new Headers({ "cache-control": "no-store", "x-accel-buffering": "no" });
   for (const name of ["content-type", "content-location"]) {

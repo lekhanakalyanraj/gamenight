@@ -4,6 +4,7 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import { serverEnv } from "@/lib/env";
 import { securityHeaders } from "@/lib/security-headers";
+import { AUTH_COOKIE } from "@/lib/supabase/cookie";
 
 /**
  * Runs before every page: sets security headers with a fresh CSP nonce, refreshes the Supabase
@@ -34,6 +35,7 @@ export async function proxy(request: NextRequest) {
 
   let response = forward();
   const supabase = createServerClient<Database>(env.supabaseUrl, env.supabaseKey, {
+    cookieOptions: AUTH_COOKIE,
     cookies: {
       getAll() {
         return request.cookies.getAll();

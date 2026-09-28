@@ -1,5 +1,8 @@
 import { postgresGames } from "./games.ts";
 import { createCatalogServer } from "./server.ts";
+import { setupTracing } from "./telemetry.ts";
+
+await setupTracing();
 
 const port = Number(process.env.PORT ?? 8080);
 const databaseUrl = process.env.CATALOG_DATABASE_URL;

@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { createServer, type Server, type ServerResponse } from "node:http";
 
 import type { GameFilters, GameStore } from "./games.ts";
+import { withRequestSpan } from "./telemetry.ts";
 
 function json(response: ServerResponse, status: number, body: unknown) {
   response.writeHead(status, { "Content-Type": "application/json" });
@@ -32,23 +33,27 @@ export function createCatalogServer(deps?: { games: GameStore; serviceToken: str
       return json(response, 200, { status: "ok", service: "catalog" });
     }
     if (request.method === "GET" && url.pathname === "/v1/games" && deps) {
-      if (!tokenMatches(request.headers.authorization, deps.serviceToken)) {
-        return json(response, 401, { error: "unauthorized" });
-      }
-      const filters: GameFilters = {};
-      const players = count(url.searchParams.get("players"), 16);
-      const minutes = count(url.searchParams.get("minutes"), 600);
-      if (players === null || minutes === null) {
-        return json(response, 400, { error: "players must be 1-16 and minutes 1-600" });
-      }
-      if (players) filters.players = players;
-      if (minutes) filters.minutes = minutes;
-      try {
-        return json(response, 200, { games: await deps.games.list(filters) });
-      } catch (error) {
-        console.error("catalog: listing games failed", error);
-        return json(response, 503, { error: "catalogue unavailable" });
-      }
+      return withRequestSpan(request, "/v1/games", async (span) => {
+        if (!tokenMatches(request.headers.authorization, deps.serviceToken)) {
+          return json(response, 401, { error: "unauthorized" });
+        }
+        const filters: GameFilters = {};
+        const players = count(url.searchParams.get("players"), 16);
+        const minutes = count(url.searchParams.get("minutes"), 600);
+        if (players === null || minutes === null) {
+          return json(response, 400, { error: "players must be 1-16 and minutes 1-600" });
+        }
+        if (players) filters.players = players;
+        if (minutes) filters.minutes = minutes;
+        try {
+          const games = await deps.games.list(filters);
+          span.setAttribute("gamenight.games", games.length);
+          return json(response, 200, { games });
+        } catch (error) {
+          console.error("catalog: listing games failed", error);
+          return json(response, 503, { error: "catalogue unavailable" });
+        }
+      });
     }
     return json(response, 404, { error: "not found" });
   });

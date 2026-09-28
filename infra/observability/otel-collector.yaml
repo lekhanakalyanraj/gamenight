@@ -1,0 +1,42 @@
+# Every service sends OTLP here; the collector forwards traces to Tempo, metrics to Prometheus and logs
+# to Loki. Services only need OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+  batch: {}
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+    resource_to_telemetry_conversion:
+      enabled: true
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheusremotewrite]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/loki]

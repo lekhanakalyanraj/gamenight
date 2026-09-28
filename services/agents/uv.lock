@@ -271,6 +271,8 @@ dependencies = [
     { name = "langchain" },
     { name = "langchain-anthropic" },
     { name = "langgraph" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-sdk" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pyjwt", extra = ["crypto"] },
 ]
@@ -289,6 +291,8 @@ requires-dist = [
     { name = "langchain", specifier = ">=1.4" },
     { name = "langchain-anthropic", specifier = ">=1.7" },
     { name = "langgraph", specifier = ">=1.2" },
+    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.30" },
+    { name = "opentelemetry-sdk", specifier = ">=1.30" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10" },
 ]

@@ -79,6 +79,9 @@ jobs:
       contents: read
     env:
       SUPABASE_URL: http://127.0.0.1:55421
+      # Browsers use a different host than the server, as on a Wi-Fi or in Docker, so e2e would catch
+      # the server and browser disagreeing about the login cookie (see lib/supabase/cookie.ts).
+      SUPABASE_BROWSER_URL: http://localhost:55421
       # CI-only internal tokens: the stack here is thrown away after the job.
       AGENTS_SERVICE_TOKEN: ci-agents-token
       CATALOG_SERVICE_TOKEN: ci-catalog-token

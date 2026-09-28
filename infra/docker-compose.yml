@@ -26,6 +26,8 @@ services:
       PUBLIC_ORIGIN: http://localhost:3200
       AGENTS_URL: http://agent-server:8000
       AGENTS_SERVICE_TOKEN: ${AGENTS_SERVICE_TOKEN:-local-dev-agents-token}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: web
 
   agent-server:
     image: gamenight-agents:dev
@@ -51,6 +53,8 @@ services:
       SUPABASE_JWT_ISSUER: http://127.0.0.1:55421/auth/v1
       CATALOG_URL: http://catalog:8080
       CATALOG_SERVICE_TOKEN: ${CATALOG_SERVICE_TOKEN:-local-dev-catalog-token}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: agents
       # No LANGGRAPH_CLOUD_LICENSE_KEY: locally the server runs with a LangSmith key alone.
       # Production needs a licence key.
     healthcheck:
@@ -71,6 +75,8 @@ services:
       DATABASE_URL: postgresql://dispatcher_svc:local-dev-dispatcher@host.docker.internal:55422/postgres
       AGENTS_URL: http://agent-server:8000
       AGENTS_SERVICE_TOKEN: ${AGENTS_SERVICE_TOKEN:-local-dev-agents-token}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: dispatcher
 
   voice:
     <<: *hardened
@@ -87,6 +93,8 @@ services:
     environment:
       CATALOG_DATABASE_URL: postgresql://catalog_svc:local-dev-catalog@host.docker.internal:55422/postgres
       CATALOG_SERVICE_TOKEN: ${CATALOG_SERVICE_TOKEN:-local-dev-catalog-token}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: catalog
 
   agent-postgres:
     image: postgres:16
@@ -110,5 +118,55 @@ services:
       timeout: 3s
       retries: 20
 
+  # ---- Observability: every service sends OTLP to the collector; view it all in Grafana (localhost:3300).
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
+    command: ["--config=/etc/otel-collector.yaml"]
+    volumes: ["./observability/otel-collector.yaml:/etc/otel-collector.yaml:ro"]
+    # On localhost too, so services started with make agents-dev etc. can export to it.
+    ports: ["127.0.0.1:4317:4317", "127.0.0.1:4318:4318"]
+    depends_on: [tempo, prometheus, loki]
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:3.0.3@sha256:0296560ac66f8a3600d7fb3014a52c189d4d9c3549ad6ff441bf2409855d68d5
+    command: ["-target=all", "-config.file=/etc/tempo.yaml"]
+    volumes: ["./observability/tempo.yaml:/etc/tempo.yaml:ro", "tempo-data:/var/tempo"]
+    ports: ["127.0.0.1:3201:3200"]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
+    command:
+      - --config.file=/etc/prometheus.yaml
+      - --web.enable-remote-write-receiver
+      - --enable-feature=exemplar-storage
+      - --enable-feature=native-histograms
+    volumes: ["./observability/prometheus.yaml:/etc/prometheus.yaml:ro"]
+    ports: ["127.0.0.1:9090:9090"]
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.2.2@sha256:ac461fb352abc50da10a51c7d02462e9c05488f11f53f14b3ad79a8145f638a0
+    # Local only: anonymous admin access, so it's published on localhost and never on the network.
+    ports: ["127.0.0.1:3300:3000"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/gamenight.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on: [prometheus, tempo, loki]
+    restart: unless-stopped
+
 volumes:
   agent-pg:
+  tempo-data:
