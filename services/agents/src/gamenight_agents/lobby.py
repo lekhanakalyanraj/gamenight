@@ -42,6 +42,6 @@ def clean_line(text: str) -> str:
     return line[:MAX_LINE] if line else "Welcome, new players!"
 
 
-async def welcome_line(model: BaseChatModel, names: list[str], rating: str) -> str:
-    reply = await model.ainvoke(welcome_messages(names, rating))
+async def welcome_line(model: BaseChatModel, names: list[str], rating: str, callbacks: list | None = None) -> str:
+    reply = await model.ainvoke(welcome_messages(names, rating), config={"callbacks": callbacks or []})
     return clean_line(str(reply.content))

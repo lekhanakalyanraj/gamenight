@@ -2,7 +2,7 @@ from gamenight_dispatcher.outbox import Event, group_by_room, run_input, run_met
 
 
 def event(id, room, name, traceparent=None):
-    return Event(id, room, "member_joined", {"nickname": name}, traceparent, 0)
+    return Event(id, room, "member_joined", {"nickname": name}, traceparent, 0, 0.0)
 
 
 def test_events_are_grouped_per_room_in_arrival_order():
@@ -22,3 +22,8 @@ def test_run_input_carries_events_and_metadata_carries_the_trace():
         ],
     }
     assert run_metadata("a", events) == {"room_id": "a", "event_ids": ["1", "2"], "traceparent": "00-abc-def-01"}
+
+
+def test_the_dispatch_span_becomes_the_agents_parent_when_there_is_one():
+    events = [event("1", "a", "Asha", "00-abc-def-01")]
+    assert run_metadata("a", events, "00-abc-123-01")["traceparent"] == "00-abc-123-01"

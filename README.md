@@ -10,7 +10,7 @@ A multiplayer party-game platform: a **TV** hosts the room, players join from th
 - **Web:** Next.js 16 (App Router, TypeScript, Tailwind) for the TV view, the phone view and the host console
 - **Data and auth:** Supabase. Postgres is the system of record; row-level security protects per-player secrets; Realtime keeps every screen in sync; hosts sign in and guests join anonymously
 - **Agents:** Python LangGraph on a self-hosted Agent Server. A supervisor hands game events to game-master agents, which act only through validated Postgres functions
-- **Observability:** OpenTelemetry for the services, LangSmith for model traces and evals
+- **Observability:** OpenTelemetry in every service (one trace from tap to model call), Grafana/Tempo/Prometheus/Loki, LangSmith for model traces, and tier 1 evals
 
 ## Status
 
@@ -92,6 +92,31 @@ Every PR runs the checks below; they also run daily on main, so newly disclosed 
 | Headers and CSP | Playwright, OWASP ZAP (nightly) | Per-request CSP nonces, no violations, clickjacking and sniffing protection |
 | AI behaviour | Golden evals, promptfoo red team (OWASP LLM + Agentic), tier 0 tests | Prompt injection, secret and prompt leaks, tool misuse, off-rating content, staying in role |
 | CI itself | zizmor, actionlint, OpenSSF Scorecard | Actions pinned by SHA, least-privilege tokens, no script injection |
+
+## Observability
+
+One trace follows a player's tap all the way to the model call:
+
+```
+phone → web (Next.js, @vercel/otel) → Supabase RPC, carrying traceparent → outbox row records it
+      → dispatcher span (continues that trace) → agents run span → gen_ai model and tool spans → catalog
+```
+
+- **How the trace crosses the database:** the web app sends a `traceparent` header only to our own services. Supabase's Data API passes it to Postgres, where the outbox trigger stores it with the event. The dispatcher continues that trace and passes its own span on to the agents.
+- **What each service emits:**
+  - web: [`instrumentation.ts`](apps/web/src/instrumentation.ts);
+  - dispatcher and agents: the OpenTelemetry SDK;
+  - catalog: a span per request.
+- **Model and tool spans** use OpenTelemetry's GenAI conventions (`gen_ai.request.model`, `gen_ai.usage.input_tokens`, ...).
+- **The stack** is an OpenTelemetry Collector feeding Tempo (traces, span metrics, service graph), Prometheus and Loki, with a provisioned **gamenight** Grafana dashboard: service map, p95 by step, dispatch lag, tokens, errors, and recent traces.
+
+```bash
+make images services-up        # every service plus the collector stack; Grafana at http://localhost:3300
+make trace-check               # after a join: confirms one trace spans web, dispatcher and agents
+OTEL=1 make lan                # the dev servers can export too (also agents-dev, dispatcher-dev, catalog-dev)
+```
+
+Tracing is off unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set, so tests and CI are unaffected.
 
 ## Images and releases
 

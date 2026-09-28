@@ -24,7 +24,7 @@ SEMGREP_RULESETS = --config p/typescript --config p/react --config p/nextjs --co
 SCAN = docker run --rm -v "$(CURDIR)":/src -w /src \
        -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src
 
-.PHONY: help images image-web image-catalog scan-image sbom security-docker dast services-test up down db-start db-stop db-reset db-test db-types db-advisors agents-build services-up services-down \
+.PHONY: trace-check help images image-web image-catalog scan-image sbom security-docker dast services-test up down db-start db-stop db-reset db-test db-types db-advisors agents-build services-up services-down \
         agents-logs agents-dev dispatcher-dev catalog-dev agents-test web lan web-check check security security-secrets security-sast security-deps \
         security-workflows hooks
 
@@ -61,26 +61,28 @@ LOCAL_DB = 127.0.0.1:55422/postgres
 # Internal service tokens for local development only; every other environment sets its own secrets.
 AGENTS_SERVICE_TOKEN  ?= local-dev-agents-token
 CATALOG_SERVICE_TOKEN ?= local-dev-catalog-token
+# Set OTEL=1 to send the dev servers' traces and metrics to the collector (make services-up starts it).
+OTEL_ENV = $(if $(OTEL),OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318)
 agents-dev:      ## agents on LangGraph's dev server at :2024 (GAMENIGHT_MODEL=fake for a free scripted model)
-	cd services/agents && AGENTS_DATABASE_URL=postgresql://agents_svc:local-dev-agents@$(LOCAL_DB) \
+	cd services/agents && $(OTEL_ENV) AGENTS_DATABASE_URL=postgresql://agents_svc:local-dev-agents@$(LOCAL_DB) \
 	  AGENTS_SERVICE_TOKEN=$(AGENTS_SERVICE_TOKEN) CATALOG_URL=http://127.0.0.1:8136 \
 	  CATALOG_SERVICE_TOKEN=$(CATALOG_SERVICE_TOKEN) uv run langgraph dev --port 2024 --no-browser --no-reload
 dispatcher-dev:  ## the dispatcher, pointed at agents-dev (health on :8134)
-	cd services/dispatcher && PORT=8134 AGENTS_URL=http://127.0.0.1:2024 AGENTS_SERVICE_TOKEN=$(AGENTS_SERVICE_TOKEN) \
+	cd services/dispatcher && $(OTEL_ENV) PORT=8134 AGENTS_URL=http://127.0.0.1:2024 AGENTS_SERVICE_TOKEN=$(AGENTS_SERVICE_TOKEN) \
 	  DATABASE_URL=postgresql://dispatcher_svc:local-dev-dispatcher@$(LOCAL_DB) uv run python -m gamenight_dispatcher
 catalog-dev:     ## the catalog's games API on :8136
-	PORT=8136 CATALOG_SERVICE_TOKEN=$(CATALOG_SERVICE_TOKEN) \
+	$(OTEL_ENV) PORT=8136 CATALOG_SERVICE_TOKEN=$(CATALOG_SERVICE_TOKEN) \
 	  CATALOG_DATABASE_URL=postgresql://catalog_svc:local-dev-catalog@$(LOCAL_DB) npm start -w @gamenight/catalog
 agents-test:     ## lint and unit-test the agent graphs
 	cd services/agents && uv run ruff check . && uv run pytest -q
 
 web:             ## Next.js dev server on http://localhost:3100
-	npm run dev -w @gamenight/web
+	$(OTEL_ENV) npm run dev -w @gamenight/web
 lan:             ## dev server for real phones on your Wi-Fi (join QR and Supabase use the laptop's address)
 	@ip=$$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $$1}'); \
 	test -n "$$ip" || { echo "Couldn't find this machine's Wi-Fi address."; exit 1; }; \
 	echo "TV: http://$$ip:3100/tv    Phones: scan the QR on the TV"; \
-	LAN_HOST=$$ip PUBLIC_ORIGIN=http://$$ip:3100 SUPABASE_BROWSER_URL=http://$$ip:55421 \
+	$(OTEL_ENV) LAN_HOST=$$ip PUBLIC_ORIGIN=http://$$ip:3100 SUPABASE_BROWSER_URL=http://$$ip:55421 \
 	  npm run dev -w @gamenight/web -- -H 0.0.0.0
 web-check:       ## typecheck and lint the web app
 	npm run typecheck -w @gamenight/web && npm run lint -w @gamenight/web
@@ -135,3 +137,6 @@ dast:            ## ZAP baseline scan of the running web app; report in .zap/rep
 	docker run --rm $(DAST_DOCKER_ARGS) -v "$(CURDIR)/.zap":/zap/wrk:rw $(ZAP) \
 	  zap-baseline.py -t $(DAST_TARGET) -c rules.tsv -r report/zap.html -J report/zap.json -j
 
+
+trace-check:     ## after a join, confirm one trace spans web, dispatcher, agents (needs the collector stack)
+	python3 scripts/trace-check.py

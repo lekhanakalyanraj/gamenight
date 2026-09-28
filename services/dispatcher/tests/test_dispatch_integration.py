@@ -96,3 +96,37 @@ def test_two_dispatchers_never_hand_out_the_same_event(room):
     assert sum(asyncio.run(both())) == 2
     handed = [e for _, ids in first.runs + second.runs for e in ids]
     assert len(handed) == len(set(handed)) == 2
+
+
+def test_a_join_trace_continues_through_the_dispatcher_to_the_agents(room):
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from gamenight_dispatcher.outbox import run_metadata
+    from gamenight_dispatcher.telemetry import current_traceparent
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    trace.set_tracer_provider(provider)
+
+    trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+    with psycopg.connect(ADMIN_URL, autocommit=True) as conn:
+        conn.execute("update dispatch.events set traceparent = %s where room_id = %s",
+                     (f"00-{trace_id}-00f067aa0ba902b7-01", room))
+
+    handed: list[dict] = []
+
+    class RecordingAgents:
+        async def start_run(self, room_id, events):
+            handed.append(run_metadata(room_id, events, current_traceparent()))
+
+    asyncio.run(dispatch_due(DISPATCHER_URL, RecordingAgents()))
+
+    span = next(s for s in exporter.get_finished_spans() if s.name == "dispatch.room")
+    assert format(span.context.trace_id, "032x") == trace_id  # continues the join's trace
+    assert span.attributes["gamenight.events"] == 2
+    # The agents get the dispatch span as their parent, in the same trace.
+    assert handed[0]["traceparent"].split("-")[1:3] == [trace_id, format(span.context.span_id, "016x")]

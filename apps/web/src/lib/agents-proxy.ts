@@ -16,7 +16,7 @@ export const MAX_CHAT_MESSAGE = 1000;
  * thing taken from the browser is the host's text (as human messages) plus streaming options. So a
  * browser can't start other graphs, pass config, or pose as a database event.
  */
-export function sanitizeRunRequest(body: unknown): Record<string, unknown> | null {
+export function sanitizeRunRequest(body: unknown, traceparent?: string): Record<string, unknown> | null {
   if (!body || typeof body !== "object") return null;
   const request = body as Record<string, unknown>;
   const input = request.input as { messages?: unknown } | null | undefined;
@@ -38,5 +38,7 @@ export function sanitizeRunRequest(body: unknown): Record<string, unknown> | nul
     stream_resumable: request.stream_resumable === true,
     on_disconnect: "continue",
     multitask_strategy: "enqueue", // queue behind lobby events on the same room thread
+    // The agents continue this request's trace (services/agents telemetry.py).
+    ...(traceparent ? { metadata: { traceparent } } : {}),
   };
 }

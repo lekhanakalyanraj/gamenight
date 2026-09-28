@@ -11,7 +11,8 @@ from typing import Any
 MAX_ATTEMPTS = 5
 
 CLAIM = """
-select id::text, room_id::text, kind, payload, traceparent, attempts
+select id::text, room_id::text, kind, payload, traceparent, attempts,
+       extract(epoch from now() - created_at) * 1000 as waited_ms
 from dispatch.events
 where dispatched_at is null and failed_at is null and next_attempt_at <= now()
 order by created_at
@@ -43,6 +44,7 @@ class Event:
     payload: dict[str, Any]
     traceparent: str | None
     attempts: int
+    waited_ms: float = 0.0
 
 
 def group_by_room(events: list[Event]) -> "OrderedDict[str, list[Event]]":
@@ -61,6 +63,15 @@ def run_input(room_id: str, events: list[Event]) -> dict[str, Any]:
     }
 
 
-def run_metadata(room_id: str, events: list[Event]) -> dict[str, Any]:
-    traceparent = next((e.traceparent for e in events if e.traceparent), None)
-    return {"room_id": room_id, "event_ids": [e.id for e in events], "traceparent": traceparent}
+def origin_traceparent(events: list[Event]) -> str | None:
+    """The trace of the first request in the batch that carried one (the join that caused it)."""
+    return next((e.traceparent for e in events if e.traceparent), None)
+
+
+def run_metadata(room_id: str, events: list[Event], traceparent: str | None = None) -> dict[str, Any]:
+    """traceparent: the dispatch span's own context, so the agents' spans nest under it."""
+    return {
+        "room_id": room_id,
+        "event_ids": [e.id for e in events],
+        "traceparent": traceparent or origin_traceparent(events),
+    }

@@ -4,6 +4,8 @@ import type { Database } from "@gamenight/db-types";
 import { createBrowserClient } from "@supabase/ssr";
 import { createContext, type ReactNode, use, useMemo } from "react";
 
+import { AUTH_COOKIE } from "@/lib/supabase/cookie";
+
 type BrowserConfig = { url: string; publishableKey: string };
 
 const SupabaseConfig = createContext<BrowserConfig | null>(null);
@@ -17,5 +19,8 @@ export function SupabaseProvider({ children, ...config }: BrowserConfig & { chil
 export function useSupabase() {
   const config = use(SupabaseConfig);
   if (!config) throw new Error("useSupabase needs <SupabaseProvider> (see app/layout.tsx).");
-  return useMemo(() => createBrowserClient<Database>(config.url, config.publishableKey), [config.url, config.publishableKey]);
+  return useMemo(
+    () => createBrowserClient<Database>(config.url, config.publishableKey, { cookieOptions: AUTH_COOKIE }),
+    [config.url, config.publishableKey],
+  );
 }
