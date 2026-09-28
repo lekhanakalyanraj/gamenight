@@ -11,7 +11,7 @@ GRYPE      = anchore/grype:v0.119.0@sha256:8c2c9234a345577a6d321a4753aa3ee1276d8
 SYFT       = anchore/syft:v1.52.0@sha256:500e2d872ac019436926e8322b4fc1f39441d94d21f6f4046c6ff29b30e8cb02
 HADOLINT   = hadolint/hadolint:v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d
 ZAP        = ghcr.io/zaproxy/zaproxy:2.17.0@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef
-LOCKFILES  = package-lock.json $(wildcard services/*/uv.lock)
+LOCKFILES  = package-lock.json $(wildcard services/*/uv.lock) evals/simulator/uv.lock
 DOCKERFILES = apps/web/Dockerfile $(wildcard services/*/Dockerfile)
 
 # Every deployable service has its own image (see the README's service map).
@@ -24,7 +24,7 @@ SEMGREP_RULESETS = --config p/typescript --config p/react --config p/nextjs --co
 SCAN = docker run --rm -v "$(CURDIR)":/src -w /src \
        -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src
 
-.PHONY: trace-check help images image-web image-catalog scan-image sbom security-docker dast services-test up down db-start db-stop db-reset db-test db-types db-advisors agents-build services-up services-down \
+.PHONY: trace-check simulate simulator-test help images image-web image-catalog scan-image sbom security-docker dast services-test up down db-start db-stop db-reset db-test db-types db-advisors agents-build services-up services-down \
         agents-logs agents-dev dispatcher-dev catalog-dev agents-test web lan web-check check security security-secrets security-sast security-deps \
         security-workflows hooks
 
@@ -87,7 +87,7 @@ lan:             ## dev server for real phones on your Wi-Fi (join QR and Supaba
 web-check:       ## typecheck and lint the web app
 	npm run typecheck -w @gamenight/web && npm run lint -w @gamenight/web
 
-check: db-test db-advisors web-check agents-test services-test   ## build and test checks CI runs
+check: db-test db-advisors web-check agents-test services-test simulator-test   ## build and test checks CI runs
 
 security: security-secrets security-sast security-deps security-workflows security-docker   ## every static security check CI runs
 security-secrets:   ## gitleaks over the full git history
@@ -140,3 +140,10 @@ dast:            ## ZAP baseline scan of the running web app; report in .zap/rep
 
 trace-check:     ## after a join, confirm one trace spans web, dispatcher, agents (needs the collector stack)
 	python3 scripts/trace-check.py
+
+GAMES ?= 20
+simulate:        ## play GAMES simulated games (default 20) on the local stack; fails on any leak or unfinished game
+	@key=$$(npx supabase status -o env | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$$/\1/p'); \
+	cd evals/simulator && SUPABASE_PUBLISHABLE_KEY=$$key uv run python -m gamenight_simulator --games $(GAMES)
+simulator-test:  ## lint and unit-test the game simulator
+	cd evals/simulator && uv run ruff check . && uv run pytest -q

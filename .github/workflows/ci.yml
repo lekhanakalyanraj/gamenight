@@ -33,9 +33,12 @@ jobs:
       - name: Security advisors (splinter)
         run: make db-advisors
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-      - name: Dispatcher against the real outbox (exactly-once, backoff, dead-letter, concurrency)
+      - name: Dispatcher against the real outbox (exactly-once, backoff, dead-letter, concurrency, timers)
         working-directory: services/dispatcher
         run: uv run pytest -q tests/test_dispatch_integration.py
+      - run: make simulator-test
+      - name: Game simulator (20 games, scripted game master; fails on any leak or unfinished game)
+        run: make simulate GAMES=20
 
   web:
     name: web (typecheck, lint, build)

@@ -18,9 +18,10 @@ A multiplayer party-game platform: a **TV** hosts the room, players join from th
 |---|---|---|
 | 0 | Monorepo, Supabase schema v0 with RLS tests, host and guest auth, Agent Server spike, CI | **done** |
 | 0.5 | Security pipeline: SAST, secrets, dependency and workflow scanning, database advisors | **done** |
-| 1 | Live rooms without AI: TV pairs by code, join by QR, live lobby with presence, host removes players; every service as a signed, scanned image | **in review** (1a merged; 1b: images, release, CSP, ZAP) |
-| 2 | Dispatcher, supervisor, host chat, OpenTelemetry and LangSmith wiring | |
-| 3–7 | Undercover, narration, Quiz Night, Mafia, Heads Up | |
+| 1 | Live rooms without AI: TV pairs by code, join by QR, live lobby with presence, host removes players; every service as a signed, scanned image | **done** |
+| 2 | Dispatcher, supervisor, host chat, evals and red team, OpenTelemetry from tap to model call | **done** |
+| 3 | Undercover end to end: the game engine in Postgres, the AI game master, phones and TV, leak gates | **in progress** (3a: game engine and simulator) |
+| 4–7 | Narration voice, Quiz Night, Mafia, Heads Up | |
 | 8 | Eval suite, dashboards, load test | |
 
 ## Services
@@ -42,10 +43,31 @@ flowchart LR
 | Service | Runtime | Status | Owns |
 |---|---|---|---|
 | web | Next.js 16 | live: TV, phones, host | nothing: every write is an RPC as the signed-in user |
-| agents | LangGraph Agent Server (Python) | skeleton graph | agent threads (its own Postgres) |
-| dispatcher | Python | health only (outbox consumer in slice 2) | `dispatch` schema |
+| agents | LangGraph Agent Server (Python) | host chat and lobby welcomes | agent threads (its own Postgres) |
+| dispatcher | Python | outbox events to the agents; game timers | `dispatch` schema |
 | voice | Python, FastAPI | health only (narration audio in slice 4) | `narration` schema |
 | catalog | TypeScript | health only (catalogue API + MCP server in slice 9) | `catalog` schema |
+
+## How a game runs
+
+Undercover is the first game. The database runs the rules and the game master makes the calls; for now the game master is a scripted referee, and the AI one comes next.
+
+- **Postgres deals.** The game master picks a word pair and a role mix. Postgres then flips which word the civilians get and shuffles who gets which role, so the deal can't be rigged.
+- **Cards are private by construction.** A card lives in `secrets`, readable only by its owner and sent only on that player's own `member:{id}` Realtime topic.
+  - Everything else (the game, its players, the vote results) is broadcast whole to the room.
+  - So none of it ever holds a word, a hidden role, Mr. White's guess or the judge's reasoning until the game ends.
+- **Players move through one RPC,** `submit_action`. It checks the phase, the turn and the target, and a retried tap with the same move id counts once.
+- **The game master acts only through `game_api`,** with its own database login.
+  - Every call names the event it handles, so a redelivered event applies once.
+  - The host agent's login can't reach it.
+- **Timers:** the dispatcher fires deadlines every second. A clue turn that runs out moves on by itself; a phase that runs out becomes an event for the game master.
+- **The host is in charge:** pause, extend a timer, skip a speaker or a phase, overrule the judge, end the game.
+- **A last line of defence:** the database refuses any host line that contains a live secret word.
+
+**The game simulator** (`evals/simulator`) plays whole games with bots, through the same RPCs and Realtime topics as phones.
+- **In every game, the bots probe for leaks:** they try to read each other's cards, listen on each other's private topics, and scan everything the TV received for a word or a role.
+- **They also try illegal moves,** which the database must refuse, and replay game-master events, which must apply once.
+- **Any leak or unfinished game fails the run.** A game whose broadcasts Realtime lost (local Realtime restarts its database stream every 10 minutes) can't be fully scanned, so it's replayed instead of counted.
 
 ## Run it locally
 
@@ -71,6 +93,7 @@ Sign in as the local demo host (`host@gamenight.test`, password in [supabase/see
 make check        # pgTAP (RLS, RPCs, service isolation), database advisors, web typecheck + lint, every service's tests
 make security     # gitleaks, Semgrep, OSV-Scanner, zizmor, actionlint, hadolint (needs Docker and uv)
 make images       # build every service image; make scan-<service> runs Grype on one
+make simulate     # 20 simulated games of Undercover on the local stack; fails on any leak (GAMES=50 for more)
 make dast         # OWASP ZAP baseline against a running web app (DAST_TARGET=...)
 make hooks        # install pre-commit hooks (gitleaks, ruff)
 npm run test:e2e -w @gamenight/web   # Playwright: a TV and five phones through a whole lobby (needs Supabase running)
@@ -82,7 +105,8 @@ Every PR runs the checks below; they also run daily on main, so newly disclosed 
 
 | Check | Tool | What it guards |
 |---|---|---|
-| Row-level security and RPCs | pgTAP | Players only see their own secrets and rooms; every table has RLS; only the room RPCs are callable |
+| Row-level security and RPCs | pgTAP | Players only see their own cards and rooms; every table has RLS; only the room and game RPCs are callable |
+| Game secrets | Game simulator | Bots play whole games while trying to read others' cards, join others' private topics and spot a word in anything public: any leak fails CI |
 | Database advisors | Supabase splinter | Misconfigured RLS, exposed `SECURITY DEFINER` functions, mutable `search_path` |
 | Static analysis | Semgrep (community + [custom rules](.semgrep/)), CodeQL | Injection, XSS, and repo rules: no RLS-bypass key, no raw HTML, writes only through RPCs |
 | Secrets | gitleaks | Keys in any commit, ever |
@@ -147,11 +171,12 @@ cd services/agents && uv run python -m evals.run_golden          # needs ANTHROP
 apps/web/              Next.js app
 packages/db-types/     TypeScript types generated from the schema (make db-types)
 services/agents/       LangGraph graphs, the Agent Server config and image
-services/dispatcher/   outbox consumer and timers (skeleton)
+services/dispatcher/   outbox consumer and game timers
 services/voice/        narration audio (skeleton)
 services/catalog/      game catalogue API and MCP server (skeleton)
 supabase/migrations/   schema, RLS policies, RPCs, realtime triggers
 supabase/tests/        pgTAP tests
+evals/simulator/       game simulator: bot players, a scripted game master, leak probes
 infra/                 docker-compose for every service
 .zap/                  OWASP ZAP rules, with a reason for each accepted finding
 scripts/               repo tooling (database advisors)

@@ -1,6 +1,8 @@
-"""The dispatch loop: wake on NOTIFY (or every few seconds), wait briefly so joins batch up, dispatch."""
+"""The dispatch loop (wake on NOTIFY or every few seconds, wait briefly so joins batch up, dispatch) and the
+game timers."""
 
 import asyncio
+import contextlib
 import logging
 
 import psycopg
@@ -72,3 +74,21 @@ async def run(database_url: str, agents: Agents, stop: asyncio.Event, poll_secon
                 pass
             if not stop.is_set():
                 await asyncio.sleep(batch_window)  # players often join together: one welcome, not five
+
+
+async def fire_deadlines(database_url: str, stop: asyncio.Event, every: float = 1.0) -> None:
+    """About once a second, fire expired game deadlines. The database does the work: a clue turn that ran
+    out moves to the next speaker, and a phase that ran out becomes a deadline_passed event."""
+    while not stop.is_set():
+        try:
+            async with await psycopg.AsyncConnection.connect(database_url, autocommit=True) as conn:
+                while not stop.is_set():
+                    fired = (await (await conn.execute("select dispatch.fire_due_deadlines()")).fetchone())[0]
+                    if fired:
+                        log.info("fired %d deadlines", fired)
+                    with contextlib.suppress(TimeoutError):
+                        await asyncio.wait_for(stop.wait(), every)
+        except psycopg.Error as error:
+            log.error("firing deadlines failed, will retry: %s", error)
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), every)
