@@ -58,7 +58,6 @@ jobs:
           digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$image:$SHA" | cut -d@ -f2)"
           echo "image=$image" >> "$GITHUB_OUTPUT"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
-          docker logout ghcr.io
 
       - name: SBOM (SPDX)
         run: make sbom IMAGE="$IMAGE@$DIGEST" OUT="sbom-$SERVICE.spdx.json"
@@ -80,6 +79,11 @@ jobs:
           subject-digest: ${{ steps.push.outputs.digest }}
           sbom-path: sbom-${{ matrix.service }}.spdx.json
           push-to-registry: true
+
+      # The attestations are pushed to GHCR too, so stay logged in until they're done.
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout ghcr.io
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
