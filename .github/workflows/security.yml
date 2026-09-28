@@ -1,0 +1,89 @@
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Daily, so newly disclosed vulnerabilities surface even when the code hasn't changed.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  workflows:
+    name: workflows (zizmor, actionlint)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Audit workflows
+        run: make security-workflows ZIZMOR_ARGS=--format=github
+        env:
+          # Lets zizmor check pinned SHAs against upstream tags and known-vulnerable actions.
+          GH_TOKEN: ${{ github.token }}
+
+  secrets:
+    name: secrets (gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan the full git history
+        run: make security-secrets
+
+  sast:
+    name: sast (semgrep)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload Semgrep results to the Security tab
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test custom rules, then scan
+        run: make security-sast SEMGREP_ARGS=--sarif-output=semgrep.sarif
+      - name: Show findings in the Security tab
+        if: always() && hashFiles('semgrep.sarif') != '' && github.event.pull_request.head.repo.fork != true
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  dependencies:
+    name: dependencies (osv-scanner)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan npm and uv lockfiles
+        run: make security-deps
+
+  dependency-review:
+    name: dependency review (new packages in this PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+          deny-licenses: AGPL-3.0-only, AGPL-3.0-or-later, GPL-3.0-only, GPL-3.0-or-later

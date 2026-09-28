@@ -1,0 +1,35 @@
+version: 2
+
+# Weekly grouped updates. The cooldown skips releases younger than a week, so a hijacked
+# package version has time to be caught upstream before it reaches us. Security updates
+# ignore the cooldown.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: uv
+    directory: /services/agents
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      uv-minor-and-patch:
+        update-types: [minor, patch]

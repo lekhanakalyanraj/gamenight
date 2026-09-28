@@ -1,0 +1,17 @@
+rules:
+  - id: gamenight.no-sql-string-building
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Don't build SQL from strings. Agent tools call the gm_* functions with bound parameters,
+      so model or player text can never become SQL (OWASP A05 injection, Agentic ASI05).
+    patterns:
+      - pattern-either:
+          - pattern: $DB.$EXEC(f"...", ...)
+          - pattern: $DB.$EXEC("..." % $ARGS, ...)
+          - pattern: $DB.$EXEC("...".format(...), ...)
+          - pattern: $DB.$EXEC("..." + $X, ...)
+          - pattern: $DB.$EXEC($X + "...", ...)
+      - metavariable-regex:
+          metavariable: $EXEC
+          regex: ^(execute|executemany|fetch|fetchrow|fetchval)$

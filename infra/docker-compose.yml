@@ -39,7 +39,8 @@ services:
       REDIS_URI: redis://redis:6379
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      # Deliberately no LANGGRAPH_CLOUD_LICENSE_KEY: slice 0 checks whether the server runs without one.
+      # No LANGGRAPH_CLOUD_LICENSE_KEY: locally the server runs with a LangSmith key alone.
+      # Production needs a licence key.
 
 volumes:
   agent-pg:

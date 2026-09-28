@@ -1,0 +1,6 @@
+# Advisor (splinter) findings we accept on purpose. One cache_key per line, then '# reason'.
+# scripts/db-advisors.py fails on any other ERROR or WARN finding.
+
+authenticated_security_definer_function_executable_public_create_room_p_nickname text, p_age_rating public.age_rating, p_confirm_adult boolean  # the room RPCs are the API: they are the only write path and check auth.uid(), guest status and age confirmation themselves
+authenticated_security_definer_function_executable_public_join_room_p_code text, p_nickname text, p_confirm_adult boolean  # room RPC (see above): locks the room row, checks capacity, status and age confirmation
+authenticated_security_definer_function_executable_public_leave_room_p_room_id uuid  # room RPC (see above): only ever touches the caller's own membership

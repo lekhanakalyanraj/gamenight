@@ -1,0 +1,16 @@
+# Semgrep's defaults (this file replaces them), plus our rule test cases.
+node_modules/
+build/
+dist/
+vendor/
+.venv/
+.next/
+*.min.js
+test/
+tests/
+
+# Rule test cases deliberately contain the patterns the rules forbid.
+.semgrep/
+
+# Generated from the database schema.
+packages/db-types/src/database.ts
