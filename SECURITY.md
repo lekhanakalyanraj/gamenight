@@ -2,7 +2,17 @@
 
 ## Reporting a vulnerability
 
-Please report vulnerabilities privately through GitHub: open the **Security** tab and choose **Report a vulnerability**. Don't open a public issue. You'll get a reply within 7 days.
+Please report vulnerabilities privately: **[report a vulnerability](https://github.com/lekhanakalyanraj/gamenight/security/advisories/new)** (GitHub private vulnerability reporting). Don't open a public issue.
+
+**What happens next:**
+
+| When | What |
+|---|---|
+| Within 7 days | We acknowledge your report and confirm whether we can reproduce it |
+| Within 30 days | A fix or mitigation for high and critical issues (lower severities in the next release) |
+| Within 90 days of your report | Coordinated disclosure: we publish an advisory, crediting you unless you'd rather stay anonymous |
+
+Only the latest version on `main` is supported. We don't take legal action over good-faith research that follows this policy and doesn't touch other people's data.
 
 The most useful reports show a player or guest being able to:
 
@@ -22,6 +32,10 @@ Every pull request runs:
 - **static analysis** (Semgrep with custom rules, CodeQL)
 - **dependency scanning** (OSV-Scanner, dependency review)
 - **workflow auditing** (zizmor, actionlint)
-- **database security tests** (pgTAP for row-level security and every RPC, plus Supabase's security advisors)
+- **database security tests** (pgTAP for row-level security, every RPC and service isolation, plus Supabase's security advisors)
+- **image scanning** (hadolint for every Dockerfile, Grype for every image)
+- **end-to-end tests**, including security headers and the CSP
+
+Every merge to `main` publishes images only after they pass Grype, with an SBOM and signed build provenance. A nightly OWASP ZAP scan runs against the web image.
 
 See `.github/workflows/`. `make security` runs the same scanners locally.

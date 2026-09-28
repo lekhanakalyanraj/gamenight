@@ -1,0 +1,8 @@
+# ZAP baseline rules for gamenight: rule id, action, reason. Any warning not listed here fails the scan.
+# IGNORE only with a reason that holds for this app; re-check the list when a new warning appears.
+10019	IGNORE	(Content-Type missing) Only on /host's redirect to /login, which has no body.
+10031	IGNORE	(User-controllable attribute) Next's server-action form fields; React escapes attribute values and inputs are validated server-side.
+10049	IGNORE	(Non-storable or cacheable content) Informational: dynamic pages are no-store by design; static assets are cacheable by design.
+10109	IGNORE	(Modern web application) Informational: the app is a React SPA-style app, so the spider uses AJAX mode if needed.
+10111	IGNORE	(Authentication request identified) Informational: /login is the host sign-in.
+10202	IGNORE	(No anti-CSRF token) Forms are Next server actions: POST-only, with the Origin header checked against Host by Next.

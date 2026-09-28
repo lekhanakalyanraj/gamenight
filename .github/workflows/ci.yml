@@ -38,9 +38,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    env:
-      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:55421
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -77,7 +74,7 @@ jobs:
     permissions:
       contents: read
     env:
-      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:55421
+      SUPABASE_URL: http://127.0.0.1:55421
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -90,7 +87,7 @@ jobs:
       - name: Start Supabase (auth, REST and Realtime)
         run: npx supabase start -x studio,imgproxy,mailpit,storage-api,postgres-meta,edge-runtime,logflare,vector,supavisor
       - name: Give the app the local stack's publishable key
-        run: npx supabase status -o env | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=\1/p' >> "$GITHUB_ENV"
+        run: npx supabase status -o env | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$/SUPABASE_PUBLISHABLE_KEY=\1/p' >> "$GITHUB_ENV"
       - run: npm run build -w @gamenight/web
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
@@ -105,3 +102,43 @@ jobs:
             apps/web/playwright-report
             apps/web/test-results
           retention-days: 7
+
+  services:
+    name: services (dispatcher, voice, catalog)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: make services-test
+
+  images:
+    name: image (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [web, agents, dispatcher, voice, catalog]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build
+        run: make "image-$SERVICE"
+        env:
+          SERVICE: ${{ matrix.service }}
+      - name: Scan (fail on fixable high or critical vulnerabilities)
+        run: make "scan-$SERVICE"
+        env:
+          SERVICE: ${{ matrix.service }}
+

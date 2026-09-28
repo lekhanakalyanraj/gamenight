@@ -1,0 +1,107 @@
+name: release
+
+# Every merge to main publishes each service's image to GHCR, but only after its vulnerability scan
+# passes, with an SBOM and signed build provenance attached. A v* tag also creates a GitHub Release.
+# Verify an image with: gh attestation verify oci://ghcr.io/<owner>/gamenight-<service>@<digest> --owner <owner>
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: publish (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push the image to GHCR
+      id-token: write # sign the attestations with this workflow's identity
+      attestations: write # store the attestations
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [web, agents, dispatcher, voice, catalog]
+    env:
+      SERVICE: ${{ matrix.service }}
+      REGISTRY_PREFIX: ghcr.io/${{ github.repository_owner }}/gamenight
+      SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No build cache in this workflow: a poisoned cache would flow straight into a published image.
+      - name: Build
+        run: make "image-$SERVICE" IMAGE_PREFIX="$REGISTRY_PREFIX" TAG="$SHA"
+
+      - name: Scan before publishing (fail on fixable high or critical vulnerabilities)
+        run: make "scan-$SERVICE" IMAGE_PREFIX="$REGISTRY_PREFIX" TAG="$SHA"
+
+      - name: Push to GHCR
+        id: push
+        env:
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          image="$REGISTRY_PREFIX-$SERVICE"
+          echo "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+          docker tag "$image:$SHA" "$image:main"
+          docker push "$image:$SHA"
+          docker push "$image:main"
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$image:$SHA" | cut -d@ -f2)"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          docker logout ghcr.io
+
+      - name: SBOM (SPDX)
+        run: make sbom IMAGE="$IMAGE@$DIGEST" OUT="sbom-$SERVICE.spdx.json"
+        env:
+          IMAGE: ${{ steps.push.outputs.image }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.push.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ steps.push.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          sbom-path: sbom-${{ matrix.service }}.spdx.json
+          push-to-registry: true
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom-${{ matrix.service }}
+          path: sbom-${{ matrix.service }}.spdx.json
+          retention-days: 30
+
+  github-release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: sbom-*
+          merge-multiple: true
+      - name: Create the release with every service's SBOM
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: gh release create "$TAG" sbom-*.spdx.json --repo "$REPO" --title "$TAG" --generate-notes --verify-tag

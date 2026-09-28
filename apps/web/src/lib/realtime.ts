@@ -4,7 +4,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useEffect, useRef, useState } from "react";
 
 import { LOBBY_SELECT, type LobbyDisplay, type LobbyMember, type LobbyRoom } from "@/lib/room";
-import { createClient } from "@/lib/supabase/client";
+import { useSupabase } from "@/lib/supabase/client";
 
 /** What each device announces on the room's presence channel. Never trusted for names or game logic. */
 export type Presence = { member_id: string } | { kind: "tv" };
@@ -62,9 +62,9 @@ export function useLiveRoom(initial: Lobby, presence: Presence): LiveRoom {
   const [connected, setConnected] = useState(false);
   const presenceRef = useRef(presence);
   const roomId = initial.room.id;
+  const supabase = useSupabase();
 
   useEffect(() => {
-    const supabase = createClient();
     let channel: RealtimeChannel | null = null;
     let cancelled = false;
 
@@ -106,7 +106,7 @@ export function useLiveRoom(initial: Lobby, presence: Presence): LiveRoom {
       cancelled = true;
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [roomId]);
+  }, [roomId, supabase]);
 
   return { ...lobby, online, tvOnline, connected, gone };
 }
@@ -117,13 +117,13 @@ export function useDisplayEvents(
   handlers: { onPaired?: (roomCode: string) => void; onUnpaired?: () => void },
 ) {
   const handlersRef = useRef(handlers);
+  const supabase = useSupabase();
   useEffect(() => {
     handlersRef.current = handlers;
   });
 
   useEffect(() => {
     if (!userId) return;
-    const supabase = createClient();
     let channel: RealtimeChannel | null = null;
     let cancelled = false;
 
@@ -142,5 +142,5 @@ export function useDisplayEvents(
       cancelled = true;
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [userId]);
+  }, [userId, supabase]);
 }
