@@ -1,7 +1,7 @@
 # The catalog service. Build from this directory: docker build services/catalog
 # No dependencies yet: Node runs the TypeScript directly (type stripping).
 
-FROM node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
+FROM node:25-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370
 ENV NODE_ENV=production PORT=8080
 WORKDIR /app
 COPY --chown=1000:1000 package.json ./

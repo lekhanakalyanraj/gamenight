@@ -2,7 +2,7 @@
 #   docker build -f apps/web/Dockerfile .
 # Configuration (SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, ...) is read at runtime, so one image runs anywhere.
 
-FROM node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS build
+FROM node:25-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS build
 WORKDIR /repo
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
@@ -14,7 +14,7 @@ COPY packages/db-types packages/db-types
 COPY apps/web apps/web
 RUN npm run build --workspace @gamenight/web
 
-FROM node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
+FROM node:25-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3100 HOSTNAME=0.0.0.0
 WORKDIR /app
 COPY --from=build --chown=1000:1000 /repo/apps/web/.next/standalone ./
