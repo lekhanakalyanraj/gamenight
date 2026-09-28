@@ -25,10 +25,10 @@ export default async function PlayPage({ params }: PageProps<"/play/[code]">) {
     );
   }
 
-  const { room_members, room_displays, ...room } = data;
+  const { room_members, room_displays, host_lines, ...room } = data;
   return (
     <PhoneLobby
-      lobby={{ room, members: room_members, displays: room_displays }}
+      lobby={{ room, members: room_members, displays: room_displays, hostLines: host_lines }}
       meId={me.id}
       isHost={me.role === "host"}
     />

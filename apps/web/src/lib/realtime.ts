@@ -3,13 +3,13 @@
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useEffect, useRef, useState } from "react";
 
-import { LOBBY_SELECT, type LobbyDisplay, type LobbyMember, type LobbyRoom } from "@/lib/room";
+import { LOBBY_SELECT, type LobbyDisplay, type LobbyHostLine, type LobbyMember, type LobbyRoom } from "@/lib/room";
 import { useSupabase } from "@/lib/supabase/client";
 
 /** What each device announces on the room's presence channel. Never trusted for names or game logic. */
 export type Presence = { member_id: string } | { kind: "tv" };
 
-type Lobby = { room: LobbyRoom; members: LobbyMember[]; displays: LobbyDisplay[] };
+type Lobby = { room: LobbyRoom; members: LobbyMember[]; displays: LobbyDisplay[]; hostLines: LobbyHostLine[] };
 
 export type LiveRoom = Lobby & {
   /** Member ids with a phone connected right now. */
@@ -44,6 +44,8 @@ function applyChange(lobby: Lobby, change: Change): Lobby {
     case "room_displays":
       if (removedId) return { ...lobby, displays: lobby.displays.filter((d) => d.id !== removedId) };
       return row ? { ...lobby, displays: upsert(lobby.displays, row as LobbyDisplay) } : lobby;
+    case "host_lines":
+      return row ? { ...lobby, hostLines: upsert(lobby.hostLines, row as LobbyHostLine) } : lobby;
     default:
       return lobby;
   }
@@ -75,8 +77,8 @@ export function useLiveRoom(initial: Lobby, presence: Presence): LiveRoom {
         setGone(true);
         return;
       }
-      const { room_members, room_displays, ...room } = data;
-      setLobby({ room, members: room_members, displays: room_displays });
+      const { room_members, room_displays, host_lines, ...room } = data;
+      setLobby({ room, members: room_members, displays: room_displays, hostLines: host_lines });
     }
 
     async function subscribe() {
