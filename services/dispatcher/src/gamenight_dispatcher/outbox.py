@@ -15,6 +15,7 @@ select id::text, room_id::text, kind, payload, traceparent, attempts,
        extract(epoch from now() - created_at) * 1000 as waited_ms
 from dispatch.events
 where dispatched_at is null and failed_at is null and next_attempt_at <= now()
+  and kind = 'member_joined'  -- game events stay queued until the game master can take them
 order by created_at
 limit %s
 for update skip locked

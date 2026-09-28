@@ -1,4 +1,4 @@
-"""Entry point: the health endpoint plus the dispatch loop."""
+"""Entry point: the health endpoint, the dispatch loop and the game timers."""
 
 import asyncio
 import logging
@@ -6,7 +6,7 @@ import os
 import signal
 
 from gamenight_dispatcher.agents import AgentServer
-from gamenight_dispatcher.dispatcher import run
+from gamenight_dispatcher.dispatcher import fire_deadlines, run
 from gamenight_dispatcher.health import serve_health
 
 
@@ -20,7 +20,8 @@ async def main() -> None:
     # The Agent Server refuses callers without the internal service token (services/agents auth.py).
     token = os.environ["AGENTS_SERVICE_TOKEN"]
     agents = AgentServer(os.environ["AGENTS_URL"], headers={"x-gamenight-service-token": token})
-    await run(os.environ["DATABASE_URL"], agents, stop)
+    database_url = os.environ["DATABASE_URL"]
+    await asyncio.gather(run(database_url, agents, stop), fire_deadlines(database_url, stop))
 
 
 if __name__ == "__main__":

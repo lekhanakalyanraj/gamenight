@@ -36,6 +36,124 @@ export type Database = {
                   Relationships: [
                     
                   ]
+                },"game_actions": {
+                  Row: {
+                    "created_at": string,"game_id": string,"id": string,"kind": string,"member_id": string,"payload": NonNullable<Json>,"room_id": string,"round": number,"step": number
+                  }
+                  Insert: {
+                    "created_at"?: string,"game_id": string,"id": string,"kind": string,"member_id": string,"payload"?: NonNullable<Json>,"room_id": string,"round": number,"step": number
+                  }
+                  Update: {
+                    "created_at"?: string,"game_id"?: string,"id"?: string,"kind"?: string,"member_id"?: string,"payload"?: NonNullable<Json>,"room_id"?: string,"round"?: number,"step"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "game_actions_game_id_fkey"
+      columns: ["game_id"]
+isOneToOne: false
+      referencedRelation: "games"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "game_actions_member_id_fkey"
+      columns: ["member_id"]
+isOneToOne: false
+      referencedRelation: "room_members"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "game_actions_room_id_fkey"
+      columns: ["room_id"]
+isOneToOne: false
+      referencedRelation: "rooms"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"game_players": {
+                  Row: {
+                    "alive": boolean,"eliminated_round": number | null,"game_id": string,"member_id": string,"revealed_role": string | null,"room_id": string,"seat": number
+                  }
+                  Insert: {
+                    "alive"?: boolean,"eliminated_round"?: number | null,"game_id": string,"member_id": string,"revealed_role"?: string | null,"room_id": string,"seat": number
+                  }
+                  Update: {
+                    "alive"?: boolean,"eliminated_round"?: number | null,"game_id"?: string,"member_id"?: string,"revealed_role"?: string | null,"room_id"?: string,"seat"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "game_players_game_id_fkey"
+      columns: ["game_id"]
+isOneToOne: false
+      referencedRelation: "games"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "game_players_member_id_fkey"
+      columns: ["member_id"]
+isOneToOne: false
+      referencedRelation: "room_members"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "game_players_room_id_fkey"
+      columns: ["room_id"]
+isOneToOne: false
+      referencedRelation: "rooms"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"game_results": {
+                  Row: {
+                    "created_at": string,"eliminated": string | null,"game_id": string,"id": string,"kind": string,"overruled": boolean | null,"revealed_role": string | null,"room_id": string,"round": number,"step": number,"tie": boolean,"tied": (string)[] | null,"verdict": boolean | null,"votes": Json | null
+                  }
+                  Insert: {
+                    "created_at"?: string,"eliminated"?: string | null,"game_id": string,"id"?: string,"kind": string,"overruled"?: boolean | null,"revealed_role"?: string | null,"room_id": string,"round": number,"step": number,"tie"?: boolean,"tied"?: (string)[] | null,"verdict"?: boolean | null,"votes"?: Json | null
+                  }
+                  Update: {
+                    "created_at"?: string,"eliminated"?: string | null,"game_id"?: string,"id"?: string,"kind"?: string,"overruled"?: boolean | null,"revealed_role"?: string | null,"room_id"?: string,"round"?: number,"step"?: number,"tie"?: boolean,"tied"?: (string)[] | null,"verdict"?: boolean | null,"votes"?: Json | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "game_results_eliminated_fkey"
+      columns: ["eliminated"]
+isOneToOne: false
+      referencedRelation: "room_members"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "game_results_game_id_fkey"
+      columns: ["game_id"]
+isOneToOne: false
+      referencedRelation: "games"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "game_results_room_id_fkey"
+      columns: ["room_id"]
+isOneToOne: false
+      referencedRelation: "rooms"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"games": {
+                  Row: {
+                    "config": NonNullable<Json>,"created_at": string,"ended_at": string | null,"guesser": string | null,"id": string,"judgement": Json | null,"kind": Database["public"]['Enums']["game_kind"],"moves_in": number,"paused_at": string | null,"paused_phase_left": string | null,"paused_turn_left": string | null,"phase": Database["public"]['Enums']["game_phase"],"phase_deadline": string | null,"resolved": boolean,"reveal": Json | null,"revoted": boolean,"room_id": string,"round": number,"settings": NonNullable<Json>,"step": number,"turn_deadline": string | null,"turn_index": number | null,"turn_order": (string)[],"vote_candidates": (string)[] | null,"winner": string | null
+                  }
+                  Insert: {
+                    "config"?: NonNullable<Json>,"created_at"?: string,"ended_at"?: string | null,"guesser"?: string | null,"id"?: string,"judgement"?: Json | null,"kind": Database["public"]['Enums']["game_kind"],"moves_in"?: number,"paused_at"?: string | null,"paused_phase_left"?: string | null,"paused_turn_left"?: string | null,"phase"?: Database["public"]['Enums']["game_phase"],"phase_deadline"?: string | null,"resolved"?: boolean,"reveal"?: Json | null,"revoted"?: boolean,"room_id": string,"round"?: number,"settings"?: NonNullable<Json>,"step"?: number,"turn_deadline"?: string | null,"turn_index"?: number | null,"turn_order"?: (string)[],"vote_candidates"?: (string)[] | null,"winner"?: string | null
+                  }
+                  Update: {
+                    "config"?: NonNullable<Json>,"created_at"?: string,"ended_at"?: string | null,"guesser"?: string | null,"id"?: string,"judgement"?: Json | null,"kind"?: Database["public"]['Enums']["game_kind"],"moves_in"?: number,"paused_at"?: string | null,"paused_phase_left"?: string | null,"paused_turn_left"?: string | null,"phase"?: Database["public"]['Enums']["game_phase"],"phase_deadline"?: string | null,"resolved"?: boolean,"reveal"?: Json | null,"revoted"?: boolean,"room_id"?: string,"round"?: number,"settings"?: NonNullable<Json>,"step"?: number,"turn_deadline"?: string | null,"turn_index"?: number | null,"turn_order"?: (string)[],"vote_candidates"?: (string)[] | null,"winner"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "games_guesser_fkey"
+      columns: ["guesser"]
+isOneToOne: false
+      referencedRelation: "room_members"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "games_room_id_fkey"
+      columns: ["room_id"]
+isOneToOne: false
+      referencedRelation: "rooms"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"host_lines": {
                   Row: {
                     "created_at": string,"event_id": string | null,"id": string,"kind": string,"room_id": string,"text": string
@@ -119,6 +237,31 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"secrets": {
+                  Row: {
+                    "created_at": string,"game_id": string,"kind": string,"member_id": string,"payload": NonNullable<Json>
+                  }
+                  Insert: {
+                    "created_at"?: string,"game_id": string,"kind": string,"member_id": string,"payload": NonNullable<Json>
+                  }
+                  Update: {
+                    "created_at"?: string,"game_id"?: string,"kind"?: string,"member_id"?: string,"payload"?: NonNullable<Json>
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "secrets_game_id_fkey"
+      columns: ["game_id"]
+isOneToOne: false
+      referencedRelation: "games"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "secrets_member_id_fkey"
+      columns: ["member_id"]
+isOneToOne: false
+      referencedRelation: "room_members"
+      referencedColumns: ["id"]
+    }
+                  ]
                 }
           }
           Views: {
@@ -139,6 +282,74 @@ isOneToOne: false
                           SetofOptions: {
         from: "*"
         to: "rooms"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"end_game":
+{ Args: { "p_game_id": string }; Returns: {
+              "config": NonNullable<Json>,
+"created_at": string,
+"ended_at": string | null,
+"guesser": string | null,
+"id": string,
+"judgement": Json | null,
+"kind": Database["public"]['Enums']["game_kind"],
+"moves_in": number,
+"paused_at": string | null,
+"paused_phase_left": string | null,
+"paused_turn_left": string | null,
+"phase": Database["public"]['Enums']["game_phase"],
+"phase_deadline": string | null,
+"resolved": boolean,
+"reveal": Json | null,
+"revoted": boolean,
+"room_id": string,
+"round": number,
+"settings": NonNullable<Json>,
+"step": number,
+"turn_deadline": string | null,
+"turn_index": number | null,
+"turn_order": (string)[],
+"vote_candidates": (string)[] | null,
+"winner": string | null
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "games"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"extend_phase":
+{ Args: { "p_game_id": string,"p_seconds"?: number }; Returns: {
+              "config": NonNullable<Json>,
+"created_at": string,
+"ended_at": string | null,
+"guesser": string | null,
+"id": string,
+"judgement": Json | null,
+"kind": Database["public"]['Enums']["game_kind"],
+"moves_in": number,
+"paused_at": string | null,
+"paused_phase_left": string | null,
+"paused_turn_left": string | null,
+"phase": Database["public"]['Enums']["game_phase"],
+"phase_deadline": string | null,
+"resolved": boolean,
+"reveal": Json | null,
+"revoted": boolean,
+"room_id": string,
+"round": number,
+"settings": NonNullable<Json>,
+"step": number,
+"turn_deadline": string | null,
+"turn_index": number | null,
+"turn_order": (string)[],
+"vote_candidates": (string)[] | null,
+"winner": string | null
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "games"
         isOneToOne: true
         isSetofReturn: false
       } },
@@ -185,15 +396,237 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"pause_game":
+{ Args: { "p_game_id": string }; Returns: {
+              "config": NonNullable<Json>,
+"created_at": string,
+"ended_at": string | null,
+"guesser": string | null,
+"id": string,
+"judgement": Json | null,
+"kind": Database["public"]['Enums']["game_kind"],
+"moves_in": number,
+"paused_at": string | null,
+"paused_phase_left": string | null,
+"paused_turn_left": string | null,
+"phase": Database["public"]['Enums']["game_phase"],
+"phase_deadline": string | null,
+"resolved": boolean,
+"reveal": Json | null,
+"revoted": boolean,
+"room_id": string,
+"round": number,
+"settings": NonNullable<Json>,
+"step": number,
+"turn_deadline": string | null,
+"turn_index": number | null,
+"turn_order": (string)[],
+"vote_candidates": (string)[] | null,
+"winner": string | null
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "games"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
 "remove_display":
 { Args: { "p_display_id": string }; Returns: undefined
                            },
+"resume_game":
+{ Args: { "p_game_id": string }; Returns: {
+              "config": NonNullable<Json>,
+"created_at": string,
+"ended_at": string | null,
+"guesser": string | null,
+"id": string,
+"judgement": Json | null,
+"kind": Database["public"]['Enums']["game_kind"],
+"moves_in": number,
+"paused_at": string | null,
+"paused_phase_left": string | null,
+"paused_turn_left": string | null,
+"phase": Database["public"]['Enums']["game_phase"],
+"phase_deadline": string | null,
+"resolved": boolean,
+"reveal": Json | null,
+"revoted": boolean,
+"room_id": string,
+"round": number,
+"settings": NonNullable<Json>,
+"step": number,
+"turn_deadline": string | null,
+"turn_index": number | null,
+"turn_order": (string)[],
+"vote_candidates": (string)[] | null,
+"winner": string | null
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "games"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"settle_judgement":
+{ Args: { "p_game_id": string,"p_overrule"?: boolean }; Returns: {
+              "config": NonNullable<Json>,
+"created_at": string,
+"ended_at": string | null,
+"guesser": string | null,
+"id": string,
+"judgement": Json | null,
+"kind": Database["public"]['Enums']["game_kind"],
+"moves_in": number,
+"paused_at": string | null,
+"paused_phase_left": string | null,
+"paused_turn_left": string | null,
+"phase": Database["public"]['Enums']["game_phase"],
+"phase_deadline": string | null,
+"resolved": boolean,
+"reveal": Json | null,
+"revoted": boolean,
+"room_id": string,
+"round": number,
+"settings": NonNullable<Json>,
+"step": number,
+"turn_deadline": string | null,
+"turn_index": number | null,
+"turn_order": (string)[],
+"vote_candidates": (string)[] | null,
+"winner": string | null
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "games"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"skip_phase":
+{ Args: { "p_game_id": string }; Returns: {
+              "config": NonNullable<Json>,
+"created_at": string,
+"ended_at": string | null,
+"guesser": string | null,
+"id": string,
+"judgement": Json | null,
+"kind": Database["public"]['Enums']["game_kind"],
+"moves_in": number,
+"paused_at": string | null,
+"paused_phase_left": string | null,
+"paused_turn_left": string | null,
+"phase": Database["public"]['Enums']["game_phase"],
+"phase_deadline": string | null,
+"resolved": boolean,
+"reveal": Json | null,
+"revoted": boolean,
+"room_id": string,
+"round": number,
+"settings": NonNullable<Json>,
+"step": number,
+"turn_deadline": string | null,
+"turn_index": number | null,
+"turn_order": (string)[],
+"vote_candidates": (string)[] | null,
+"winner": string | null
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "games"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"skip_turn":
+{ Args: { "p_game_id": string }; Returns: {
+              "config": NonNullable<Json>,
+"created_at": string,
+"ended_at": string | null,
+"guesser": string | null,
+"id": string,
+"judgement": Json | null,
+"kind": Database["public"]['Enums']["game_kind"],
+"moves_in": number,
+"paused_at": string | null,
+"paused_phase_left": string | null,
+"paused_turn_left": string | null,
+"phase": Database["public"]['Enums']["game_phase"],
+"phase_deadline": string | null,
+"resolved": boolean,
+"reveal": Json | null,
+"revoted": boolean,
+"room_id": string,
+"round": number,
+"settings": NonNullable<Json>,
+"step": number,
+"turn_deadline": string | null,
+"turn_index": number | null,
+"turn_order": (string)[],
+"vote_candidates": (string)[] | null,
+"winner": string | null
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "games"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
 "start_display_pairing":
 { Args: Record<PropertyKey, never>; Returns: string
-                           }
+                           },
+"start_game":
+{ Args: { "p_kind": Database["public"]['Enums']["game_kind"],"p_room_id": string,"p_settings"?: Json }; Returns: {
+              "config": NonNullable<Json>,
+"created_at": string,
+"ended_at": string | null,
+"guesser": string | null,
+"id": string,
+"judgement": Json | null,
+"kind": Database["public"]['Enums']["game_kind"],
+"moves_in": number,
+"paused_at": string | null,
+"paused_phase_left": string | null,
+"paused_turn_left": string | null,
+"phase": Database["public"]['Enums']["game_phase"],
+"phase_deadline": string | null,
+"resolved": boolean,
+"reveal": Json | null,
+"revoted": boolean,
+"room_id": string,
+"round": number,
+"settings": NonNullable<Json>,
+"step": number,
+"turn_deadline": string | null,
+"turn_index": number | null,
+"turn_order": (string)[],
+"vote_candidates": (string)[] | null,
+"winner": string | null
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "games"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"submit_action":
+{ Args: { "p_action_id": string,"p_game_id": string,"p_kind": string,"p_payload": Json }; Returns: {
+              "created_at": string,
+"game_id": string,
+"id": string,
+"kind": string,
+"member_id": string,
+"payload": NonNullable<Json>,
+"room_id": string,
+"round": number,
+"step": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "game_actions"
+        isOneToOne: true
+        isSetofReturn: false
+      } }
           }
           Enums: {
-            "age_rating": "family"|"teen"|"adult","member_role": "host"|"player","room_status": "lobby"|"playing"|"closed"
+            "age_rating": "family"|"teen"|"adult","game_kind": "undercover","game_phase": "setup"|"clues"|"discussion"|"vote"|"guess"|"ended","member_role": "host"|"player","room_status": "lobby"|"playing"|"closed"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -313,7 +746,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "age_rating": ["family", "teen", "adult"],"member_role": ["host", "player"],"room_status": ["lobby", "playing", "closed"]
+            "age_rating": ["family", "teen", "adult"],"game_kind": ["undercover"],"game_phase": ["setup", "clues", "discussion", "vote", "guess", "ended"],"member_role": ["host", "player"],"room_status": ["lobby", "playing", "closed"]
           }
         }
 } as const

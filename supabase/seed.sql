@@ -33,3 +33,4 @@ $$;
 alter role dispatcher_svc login password 'local-dev-dispatcher';
 alter role agents_svc login password 'local-dev-agents';
 alter role catalog_svc login password 'local-dev-catalog';
+alter role game_master_svc login password 'local-dev-game-master';

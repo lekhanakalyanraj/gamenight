@@ -8,3 +8,12 @@ authenticated_security_definer_function_executable_public_kick_member_p_member_i
 authenticated_security_definer_function_executable_public_start_display_pairing_  # TV RPC: issues a code for the caller's own screen and replaces any older one
 authenticated_security_definer_function_executable_public_pair_display_p_room_id uuid, p_code text  # room RPC: only the room's host; wrong codes are rate-limited
 authenticated_security_definer_function_executable_public_remove_display_p_display_id uuid  # room RPC: only the host of the TV's room
+authenticated_security_definer_function_executable_public_start_game_p_room_id uuid, p_kind public.game_kind, p_settings jsonb  # game RPC: only the room's host, only from the lobby, 3 to 16 players, settings validated
+authenticated_security_definer_function_executable_public_submit_action_p_game_id uuid, p_kind text, p_payload jsonb, p_action_id uuid  # game RPC: the only way a player moves; checks it's the caller's game, turn, phase and target; one move per step
+authenticated_security_definer_function_executable_public_pause_game_p_game_id uuid  # host control: only the host of the game's room
+authenticated_security_definer_function_executable_public_resume_game_p_game_id uuid  # host control: only the host of the game's room
+authenticated_security_definer_function_executable_public_extend_phase_p_game_id uuid, p_seconds integer  # host control: only the host; 10 to 120 seconds
+authenticated_security_definer_function_executable_public_skip_turn_p_game_id uuid  # host control: only the host, only during clue turns
+authenticated_security_definer_function_executable_public_skip_phase_p_game_id uuid  # host control: only the host; hands the decision to the game master, as a timer would
+authenticated_security_definer_function_executable_public_settle_judgement_p_game_id uuid, p_overrule boolean  # host control: only the host, only while a verdict on Mr. White's guess is waiting
+authenticated_security_definer_function_executable_public_end_game_p_game_id uuid  # host control: only the host of the game's room

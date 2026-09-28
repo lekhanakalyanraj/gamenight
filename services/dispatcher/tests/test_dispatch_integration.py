@@ -7,7 +7,7 @@ import uuid
 import psycopg
 import pytest
 
-from gamenight_dispatcher.dispatcher import dispatch_due
+from gamenight_dispatcher.dispatcher import dispatch_due, fire_deadlines
 
 ADMIN_URL = os.environ.get("ADMIN_DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:55422/postgres")
 DISPATCHER_URL = os.environ.get(
@@ -130,3 +130,48 @@ def test_a_join_trace_continues_through_the_dispatcher_to_the_agents(room):
     assert span.attributes["gamenight.events"] == 2
     # The agents get the dispatch span as their parent, in the same trace.
     assert handed[0]["traceparent"].split("-")[1:3] == [trace_id, format(span.context.span_id, "016x")]
+
+
+def test_game_events_wait_for_the_game_master(room):
+    with psycopg.connect(ADMIN_URL, autocommit=True) as conn:
+        conn.execute("insert into dispatch.events (room_id, kind) values (%s, 'game_started')", (room,))
+    agents = FakeAgents()
+    assert asyncio.run(dispatch_due(DISPATCHER_URL, agents)) == 2  # the two joins only
+    with psycopg.connect(ADMIN_URL) as conn:
+        kind, dispatched = conn.execute(
+            "select kind, dispatched_at is not null from dispatch.events "
+            "where room_id = %s and kind <> 'member_joined'",
+            (room,),
+        ).fetchone()
+    assert (kind, dispatched) == ("game_started", False)
+
+
+def test_a_clue_turn_that_runs_out_moves_to_the_next_speaker(room):
+    with psycopg.connect(ADMIN_URL, autocommit=True) as conn:
+        host = conn.execute("select host_id from public.rooms where id = %s", (room,)).fetchone()[0]
+        member = conn.execute(
+            "insert into public.room_members (room_id, user_id, nickname) values (%s, %s, 'Host') returning id",
+            (room, host),
+        ).fetchone()[0]
+        conn.execute("update public.rooms set status = 'playing' where id = %s", (room,))
+        # Two turns, and the first has just run out.
+        game = conn.execute(
+            "insert into public.games (room_id, kind, phase, config, turn_order, turn_index, turn_deadline) "
+            "values (%s, 'undercover', 'clues', '{\"turn_seconds\": 20}', %s, 0, now() - interval '1 second') "
+            "returning id",
+            (room, [member, member]),
+        ).fetchone()[0]
+
+    async def tick_once():
+        stop = asyncio.Event()
+        ticking = asyncio.create_task(fire_deadlines(DISPATCHER_URL, stop, every=0.1))
+        await asyncio.sleep(0.5)
+        stop.set()
+        await ticking
+
+    asyncio.run(tick_once())
+    with psycopg.connect(ADMIN_URL) as conn:
+        turn_index, deadline_ahead = conn.execute(
+            "select turn_index, turn_deadline > now() + interval '15 seconds' from public.games where id = %s", (game,)
+        ).fetchone()
+    assert (turn_index, deadline_ahead) == (1, True)

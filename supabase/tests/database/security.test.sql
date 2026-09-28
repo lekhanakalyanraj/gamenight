@@ -17,7 +17,7 @@ select is_empty(
 select is_empty(
   $$ select n.nspname || '.' || p.proname
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-     where n.nspname in ('public', 'private') and p.prosecdef
+     where n.nspname in ('public', 'private', 'dispatch', 'agents_api', 'game_api', 'content') and p.prosecdef
        and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) cfg where cfg like 'search_path=%') $$,
   'every SECURITY DEFINER function pins its search_path'
 );
@@ -34,8 +34,10 @@ select set_eq(
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname = 'public' and p.prosecdef and has_function_privilege('authenticated', p.oid, 'execute') $$,
   array['create_room', 'join_room', 'leave_room', 'kick_member',
-        'start_display_pairing', 'pair_display', 'remove_display'],
-  'the only SECURITY DEFINER functions signed-in users can call through the API are the room RPCs'
+        'start_display_pairing', 'pair_display', 'remove_display',
+        'start_game', 'submit_action', 'pause_game', 'resume_game', 'extend_phase', 'skip_turn', 'skip_phase',
+        'settle_judgement', 'end_game'],
+  'the only SECURITY DEFINER functions signed-in users can call through the API are the room and game RPCs'
 );
 
 select ok(
@@ -52,15 +54,17 @@ select ok(
 );
 
 select ok(
-  not has_schema_privilege('anon', 'private', 'usage'),
-  'signed-out visitors cannot use the private schema'
+  not has_schema_privilege('anon', 'private', 'usage')
+  and not has_schema_privilege('anon', 'content', 'usage')
+  and not has_schema_privilege('authenticated', 'content', 'usage'),
+  'signed-out visitors cannot use the private schema, and nobody outside the game master can reach the word bank'
 );
 
 select is_empty(
   $$ select table_name::text || ' (' || grantee || ')'
      from information_schema.role_table_grants
-     where table_schema = 'private' and grantee in ('anon', 'authenticated') $$,
-  'signed-in users and visitors have no direct access to any table in the private schema'
+     where table_schema in ('private', 'content') and grantee in ('anon', 'authenticated') $$,
+  'signed-in users and visitors have no direct access to any table in the private or content schemas'
 );
 
 select * from finish();
