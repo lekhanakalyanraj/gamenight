@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 -- added by future migrations, so a new table without RLS or a new API-callable SECURITY DEFINER
 -- function fails CI until it's deliberately allowed here.
 
-select plan(7);
+select plan(8);
 
 select is_empty(
   $$ select c.relname::text
@@ -33,7 +33,8 @@ select set_eq(
   $$ select p.proname::text
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname = 'public' and p.prosecdef and has_function_privilege('authenticated', p.oid, 'execute') $$,
-  array['create_room', 'join_room', 'leave_room'],
+  array['create_room', 'join_room', 'leave_room', 'kick_member',
+        'start_display_pairing', 'pair_display', 'remove_display'],
   'the only SECURITY DEFINER functions signed-in users can call through the API are the room RPCs'
 );
 
@@ -45,13 +46,21 @@ select ok(
 
 select ok(
   has_function_privilege('authenticated', 'private.is_room_member(uuid)', 'execute')
-  and has_function_privilege('authenticated', 'private.can_access_room_topic(text)', 'execute'),
+  and has_function_privilege('authenticated', 'private.can_view_room(uuid)', 'execute')
+  and has_function_privilege('authenticated', 'private.can_access_topic(text)', 'execute'),
   'signed-in users can still evaluate the RLS helpers that policies depend on'
 );
 
 select ok(
   not has_schema_privilege('anon', 'private', 'usage'),
   'signed-out visitors cannot use the private schema'
+);
+
+select is_empty(
+  $$ select table_name::text || ' (' || grantee || ')'
+     from information_schema.role_table_grants
+     where table_schema = 'private' and grantee in ('anon', 'authenticated') $$,
+  'signed-in users and visitors have no direct access to any table in the private schema'
 );
 
 select * from finish();

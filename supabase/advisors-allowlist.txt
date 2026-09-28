@@ -4,3 +4,7 @@
 authenticated_security_definer_function_executable_public_create_room_p_nickname text, p_age_rating public.age_rating, p_confirm_adult boolean  # the room RPCs are the API: they are the only write path and check auth.uid(), guest status and age confirmation themselves
 authenticated_security_definer_function_executable_public_join_room_p_code text, p_nickname text, p_confirm_adult boolean  # room RPC (see above): locks the room row, checks capacity, status and age confirmation
 authenticated_security_definer_function_executable_public_leave_room_p_room_id uuid  # room RPC (see above): only ever touches the caller's own membership
+authenticated_security_definer_function_executable_public_kick_member_p_member_id uuid  # room RPC: only the room's host, only in the lobby, never themselves
+authenticated_security_definer_function_executable_public_start_display_pairing_  # TV RPC: issues a code for the caller's own screen and replaces any older one
+authenticated_security_definer_function_executable_public_pair_display_p_room_id uuid, p_code text  # room RPC: only the room's host; wrong codes are rate-limited
+authenticated_security_definer_function_executable_public_remove_display_p_display_id uuid  # room RPC: only the host of the TV's room
