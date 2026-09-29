@@ -20,7 +20,7 @@ A multiplayer party-game platform: a **TV** hosts the room, players join from th
 | 0.5 | Security pipeline: SAST, secrets, dependency and workflow scanning, database advisors | **done** |
 | 1 | Live rooms without AI: TV pairs by code, join by QR, live lobby with presence, host removes players; every service as a signed, scanned image | **done** |
 | 2 | Dispatcher, supervisor, host chat, evals and red team, OpenTelemetry from tap to model call | **done** |
-| 3 | Undercover end to end: the game engine in Postgres, the AI game master, phones and TV, leak gates | **in progress** (3a merged; 3b: the AI game master) |
+| 3 | Undercover end to end: the game engine in Postgres, the AI game master, phones and TV, leak gates | **in progress** (3a and 3b merged; 3c: phones and TV) |
 | 4–7 | Narration voice, Quiz Night, Mafia, Heads Up | |
 | 8 | Eval suite, dashboards, load test | |
 
@@ -73,6 +73,11 @@ Undercover is the first game. The database runs the rules, and an AI game master
   A rejected line gets one rewrite; after that, a safe stock line is shown instead.
 - **Timers:** the dispatcher fires deadlines every second. A clue turn that runs out moves on by itself; a phase that runs out becomes an event for the game master.
 - **The host is in charge:** pause, extend a timer, skip a speaker or a phase, overrule the judge, end the game.
+- **On screen:**
+  - **Phones:** each one keeps its card face down until it's held. It shows "You're up" on your turn, the vote, and Mr. White's guess box. The host starts the game with a theme, and steers it from a drawer at the bottom of their screen.
+  - **The TV:** it spotlights the speaker, counts votes without names, draws everyone's votes as arrows before the eliminated player's role turns over, and ends on a full reveal. The animations use Motion, and respect "reduce motion".
+  - **Staying in sync:** broadcasts can be missed, so screens re-read the game on reconnect, when a phone comes back to the foreground, or when a step is skipped.
+  - **The CSP stays strict:** the animated screens render only in the browser, so the nonce-only style policy holds.
 - **A last line of defence:** the database refuses any host line that contains a live secret word.
 
 **The game simulator** (`evals/simulator`) plays whole games with bots, through the same RPCs and Realtime topics as phones. The game master is either a scripted referee (`make simulate`), or the whole pipeline: dispatcher, Agent Server, game master and narrator (`make simulate GM=agents`). With `GAMENIGHT_MODEL=fake` the pipeline's game master plays scripted rules, some of them deliberately leaky, for free.
@@ -109,7 +114,7 @@ make simulate     # 20 simulated games of Undercover on the local stack; fails o
 make simulate GM=agents   # the same, with the real pipeline as game master (run agents-dev and dispatcher-dev first)
 make dast         # OWASP ZAP baseline against a running web app (DAST_TARGET=...)
 make hooks        # install pre-commit hooks (gitleaks, ruff)
-npm run test:e2e -w @gamenight/web   # Playwright: a TV and five phones through a whole lobby (needs Supabase running)
+npm run test:e2e -w @gamenight/web   # Playwright: a TV and five phones through a lobby and a whole game (needs Supabase running)
 ```
 
 ## Security
