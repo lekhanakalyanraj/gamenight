@@ -1,28 +1,34 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useActionState, useState, useTransition } from "react";
 
+import { StartGame } from "@/components/game/start-game";
+import { useNow } from "@/lib/clock";
 import { AgeBadge, HostCaption, PlayerCount, PlayerTile, RoomEnded } from "@/components/lobby";
 import { Button, ButtonLink, Card, Field, Notice, Page } from "@/components/ui";
-import { useLiveRoom } from "@/lib/realtime";
-import {
-  activeMembers,
-  latestHostLine,
-  type LobbyDisplay,
-  type LobbyHostLine,
-  type LobbyMember,
-  type LobbyRoom,
-} from "@/lib/room";
+import { type Lobby, useLiveRoom } from "@/lib/realtime";
+import { activeMembers, latestHostLine, type LobbyDisplay, type LobbyMember } from "@/lib/room";
 import type { FormState } from "@/lib/validate";
 
 import { kickMember, leaveRoom, pairDisplay, removeDisplay } from "./actions";
 import { HostChat } from "./host-chat";
 
-type Lobby = { room: LobbyRoom; members: LobbyMember[]; displays: LobbyDisplay[]; hostLines: LobbyHostLine[] };
+// The game screens animate with Motion, which sets inline styles; rendered only in the browser, those go
+// through the CSSOM, which the nonce-only style CSP allows (server-rendered style attributes it would not).
+const PhoneGame = dynamic(() => import("@/components/game/phone-game"), {
+  ssr: false,
+  loading: () => <p className="p-10 text-center text-muted">Loading the game…</p>,
+});
+
+/** An ended game stays on screen until you leave its reveal, or for 10 minutes after a reload. */
+const REVEAL_MINUTES = 10;
 
 export function PhoneLobby({ lobby, meId, isHost }: { lobby: Lobby; meId: string; isHost: boolean }) {
   const live = useLiveRoom(lobby, { member_id: meId });
   const me = live.members.find((m) => m.id === meId);
+  const [leftReveal, setLeftReveal] = useState<string | null>(null);
+  const now = useNow(10_000);
 
   if (me?.removed_by_host) {
     return (
@@ -44,6 +50,13 @@ export function PhoneLobby({ lobby, meId, isHost }: { lobby: Lobby; meId: string
         <ButtonLink href="/">Back to the start</ButtonLink>
       </RoomEnded>
     );
+  }
+
+  const game = live.game;
+  const showGame = game && (game.game.phase !== "ended"
+    || (leftReveal !== game.game.id && Date.parse(game.game.ended_at ?? "") > now - REVEAL_MINUTES * 60_000));
+  if (game && showGame) {
+    return <PhoneGame live={{ ...live, game }} meId={meId} isHost={isHost} onBackToLobby={() => setLeftReveal(game.game.id)} />;
   }
 
   const players = activeMembers(live.members);
@@ -81,8 +94,10 @@ export function PhoneLobby({ lobby, meId, isHost }: { lobby: Lobby; meId: string
         </ul>
       </Card>
 
+      {isHost ? <StartGame roomId={live.room.id} players={players.length} /> : null}
+
       <p className="text-center text-sm text-muted">
-        {isHost ? "Games arrive in a later slice. For now, this is your lobby." : "Waiting for the host to start."}
+        {isHost ? null : "Waiting for the host to start."}
         {!live.connected ? <span role="status"> Reconnecting…</span> : null}
       </p>
 

@@ -1,30 +1,34 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { AgeBadge, HostCaption, PlayerCount, PlayerTile, RoomEnded } from "@/components/lobby";
 import { ButtonLink } from "@/components/ui";
-import { useDisplayEvents, useLiveRoom } from "@/lib/realtime";
-import {
-  activeMembers,
-  latestHostLine,
-  type LobbyDisplay,
-  type LobbyHostLine,
-  type LobbyMember,
-  type LobbyRoom,
-  MIN_PLAYERS,
-} from "@/lib/room";
+import { useNow } from "@/lib/clock";
+import { type Lobby, useDisplayEvents, useLiveRoom } from "@/lib/realtime";
+import { activeMembers, latestHostLine, MIN_PLAYERS } from "@/lib/room";
+
+// Client-only, like the phone's game screen: Motion's inline styles must not be server-rendered (strict CSP).
+const TvGame = dynamic(() => import("@/components/game/tv-game"), {
+  ssr: false,
+  loading: () => <p className="p-10 text-center text-3xl text-muted">Loading the game…</p>,
+});
+
+/** How long the TV shows a finished game's reveal before going back to the lobby and its QR code. */
+const REVEAL_SECONDS = 60;
 
 export function TvLobby({ lobby, userId, joinUrl, qr }: {
-  lobby: { room: LobbyRoom; members: LobbyMember[]; displays: LobbyDisplay[]; hostLines: LobbyHostLine[] };
+  lobby: Lobby;
   userId: string;
   joinUrl: string;
   qr: string;
 }) {
   const router = useRouter();
   const live = useLiveRoom(lobby, { kind: "tv" });
+  const now = useNow(1000);
   useDisplayEvents(userId, { onUnpaired: () => router.replace("/tv") });
 
   // Disconnected by the host, or the room is otherwise out of reach: go back to showing a pairing code.
@@ -38,6 +42,11 @@ export function TvLobby({ lobby, userId, joinUrl, qr }: {
         <ButtonLink href="/tv">Show a new TV code</ButtonLink>
       </RoomEnded>
     );
+  }
+
+  const game = live.game;
+  if (game && (game.game.phase !== "ended" || Date.parse(game.game.ended_at ?? "") > now - REVEAL_SECONDS * 1000)) {
+    return <TvGame live={{ ...live, game }} />;
   }
 
   const players = activeMembers(live.members);

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import QRCode from "qrcode";
 
+import { fromRow, GAME_SELECT } from "@/lib/game";
 import { publicOrigin } from "@/lib/origin";
 import { LOBBY_SELECT } from "@/lib/room";
 import { createClient, getIdentity } from "@/lib/supabase/server";
@@ -20,6 +21,8 @@ export default async function TvRoomPage({ params }: PageProps<"/tv/[code]">) {
   const { data } = await supabase.from("rooms").select(LOBBY_SELECT).eq("code", code.toUpperCase()).maybeSingle();
   if (!data) redirect("/tv");
 
+  const { data: game } = await supabase.from("games").select(GAME_SELECT).eq("room_id", data.id)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
   const { room_members, room_displays, host_lines, ...room } = data;
   const joinUrl = `${await publicOrigin()}/join?code=${room.code}`;
   const qr = await QRCode.toDataURL(joinUrl, {
@@ -31,7 +34,7 @@ export default async function TvRoomPage({ params }: PageProps<"/tv/[code]">) {
 
   return (
     <TvLobby
-      lobby={{ room, members: room_members, displays: room_displays, hostLines: host_lines }}
+      lobby={{ room, members: room_members, displays: room_displays, hostLines: host_lines, game: game ? fromRow(game) : null }}
       userId={identity.userId}
       joinUrl={joinUrl}
       qr={qr}

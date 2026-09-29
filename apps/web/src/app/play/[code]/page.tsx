@@ -1,4 +1,5 @@
 import { ButtonLink, Page } from "@/components/ui";
+import { fromRow, GAME_SELECT } from "@/lib/game";
 import { LOBBY_SELECT } from "@/lib/room";
 import { createClient, getIdentity } from "@/lib/supabase/server";
 
@@ -25,10 +26,12 @@ export default async function PlayPage({ params }: PageProps<"/play/[code]">) {
     );
   }
 
+  const { data: game } = await supabase.from("games").select(GAME_SELECT).eq("room_id", data.id)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
   const { room_members, room_displays, host_lines, ...room } = data;
   return (
     <PhoneLobby
-      lobby={{ room, members: room_members, displays: room_displays, hostLines: host_lines }}
+      lobby={{ room, members: room_members, displays: room_displays, hostLines: host_lines, game: game ? fromRow(game) : null }}
       meId={me.id}
       isHost={me.role === "host"}
     />
