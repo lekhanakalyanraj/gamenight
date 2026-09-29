@@ -13,7 +13,10 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from gamenight_simulator.leaks import broadcast_leaks, private_topic_leaks, public_leaks, record
+import httpx
+
+from gamenight_simulator.agents import Agents
+from gamenight_simulator.leaks import broadcast_leaks, narration_leaks, private_topic_leaks, public_leaks, record
 from gamenight_simulator.realtime import Realtime
 from gamenight_simulator.referee import Referee
 from gamenight_simulator.supabase import RpcError, Session, Supabase
@@ -58,13 +61,19 @@ class GameReport:
     leaks: list[str] = field(default_factory=list)
     illegal_refused: int = 0
     late_moves: int = 0
+    narrations: int = 0
+    gm: dict[str, Any] = field(default_factory=dict)  # the AI game master's totals (agents mode)
+    gm_seconds: list[float] = field(default_factory=list)  # how long each wait for the game master took
     errors: list[str] = field(default_factory=list)
 
 
 class Game:
     def __init__(self, sb: Supabase, referee: Referee, host: Player, table: list[Player], tv: Player,
-                 rng: random.Random, report: GameReport, staller: Player | None):
+                 rng: random.Random, report: GameReport, staller: Player | None, agents: Agents | None = None):
         self.sb, self.referee, self.host, self.table, self.tv = sb, referee, host, table, tv
+        self.agents = agents  # None: the scripted referee plays the game master here; else the real pipeline does
+        self.gm_since: float | None = None
+        self.seen_since: dict[tuple, float] = {}
         self.rng, self.report, self.staller = rng, report, staller
         self.by_member: dict[str, Player] = {}
         self.game_id = ""
@@ -105,6 +114,25 @@ class Game:
         self.stalls_left -= 1
         return True
 
+    @staticmethod
+    def gm_turn(g: dict[str, Any]) -> bool:
+        """Whether the game is waiting on the game master (not on the players, the host or a timer)."""
+        phase = g["phase"]
+        return g["paused_at"] is None and (
+            phase == "setup"
+            or (phase == "clues" and g["turn_index"] is None)
+            or (phase == "discussion" and g["phase_deadline"] is None)
+            or (phase == "vote" and (g["resolved"] or g["phase_deadline"] is None))
+            or (phase == "guess" and ((g["judgement"] is None and g["phase_deadline"] is None) or g["resolved"])))
+
+    def time_game_master(self, g: dict[str, Any]) -> None:
+        now = time.monotonic()
+        if self.gm_turn(g) and g["phase"] != "ended":
+            self.gm_since = self.gm_since or now
+        elif self.gm_since is not None:
+            self.report.gm_seconds.append(round(now - self.gm_since, 2))
+            self.gm_since = None
+
     def once(self, *key: Any) -> bool:
         if key in self.done:
             return False
@@ -127,6 +155,14 @@ class Game:
         """The bots' and the host's moves for the current state. Returns whether anyone moved."""
         rng, step, phase = self.rng, g["step"], g["phase"]
         if g["paused_at"] is not None:
+            return False
+
+        if phase == "discussion" and g["phase_deadline"] is not None and self.agents is not None:
+            # Bots don't talk: after a moment the host skips discussion, and the game master opens the vote.
+            since = self.seen_since.setdefault(("discussion", step), time.monotonic())
+            if time.monotonic() - since > 3 and self.once("skip", step):
+                await self.sb.rpc(self.host.session, "skip_phase", p_game_id=self.game_id)
+                return True
             return False
 
         if phase == "clues" and g["turn_index"] is not None and self.once("turn", step, g["turn_index"]):
@@ -239,6 +275,18 @@ class Game:
         return [f"{p.name} could listen on {q.name}'s private topic"
                 for (p, q), joined in zip(attempts, results, strict=True) if joined]
 
+    async def narration_scan(self, room_id: str, g: dict[str, Any], words: list[str]) -> list[str]:
+        lines = [line for line in await self.sb.select(self.tv.session, "host_lines", room_id=room_id)
+                 if line["kind"] == "narration"]
+        self.report.narrations = len(lines)
+        results = await self.sb.select(self.tv.session, "game_results", game_id=self.game_id)
+        names = {p["member_id"]: p["nickname"] for p in self.truth["players"]}
+        roles = {p["nickname"]: p["role"] for p in self.truth["players"]}
+        revealed_at: dict[str, str] = {}  # when each role was first shown (Mr. White also has a later guess result)
+        for r in sorted((r for r in results if r.get("eliminated")), key=lambda r: r["created_at"]):
+            revealed_at.setdefault(names[r["eliminated"]], r["created_at"])
+        return narration_leaks(lines, words, roles, revealed_at, g.get("ended_at"))
+
     async def read_cards(self) -> list[str]:
         leaks = []
         for player in self.table:
@@ -252,6 +300,8 @@ class Game:
     async def play(self) -> None:
         report, sb = self.report, self.sb
         started = time.monotonic()
+        # One trace per game: every call carries it, so each game-master run for this game joins the trace.
+        sb.traceparent = f"00-{uuid.uuid4().hex}-{uuid.uuid4().hex[:16]}-01"
         room = await self.setup_room()
         game = await sb.rpc(self.host.session, "start_game", p_room_id=room["id"], p_kind="undercover",
                             p_settings=report.settings)
@@ -262,9 +312,12 @@ class Game:
 
         # Generous: a normal game takes seconds; each stall waits out a timer of up to 60 s.
         timeout = 60.0 + 5.0 * len(self.table) + 60.0 * self.stalls_left
+        if self.agents is not None:  # each game-master turn is a few seconds of model calls
+            timeout += 20.0 * len(self.table)
         while time.monotonic() - started < timeout:
-            acted = await self.referee.act(self.game_id)
+            acted = await self.referee.act(self.game_id) if self.agents is None else False
             g = (await sb.select(self.tv.session, "games", id=self.game_id))[0]
+            self.time_game_master(g)
             players = await sb.select(self.tv.session, "game_players", game_id=self.game_id)
             seen += [("games", g), *(("game_players", p) for p in players)]
             if g["phase"] == "ended":
@@ -282,6 +335,8 @@ class Game:
             report.errors.append(f"didn't finish within {timeout:.0f} s (phase {g['phase']})")
 
         room_topic = f"room:{room['id']}"
+        if self.agents is not None and not await self.agents.wait_idle(self.game_id):
+            report.errors.append("the game master was still busy 30 s after the game ended")
         # Local Realtime restarts its database stream every 10 minutes ("rebalancing"), and broadcasts sent
         # during the gap are lost. A game that spans one can't be fully scanned, so it's inconclusive.
         lost = await self.undelivered(room_topic)
@@ -302,6 +357,10 @@ class Game:
             moves = await sb.select(player.session, "game_actions", game_id=self.game_id)
             if any(m["member_id"] != player.member_id for m in moves):
                 report.leaks.append(f"{player.name} could read someone else's moves")
+        if self.truth:
+            report.leaks += await self.narration_scan(room["id"], g, words)
+        if self.agents is not None:
+            report.gm = await self.agents.game_stats(self.game_id)
         if probes is not None:
             report.leaks += await probes
             for player in [*self.table, self.tv]:
@@ -324,7 +383,7 @@ class Game:
 
 async def play_game(sb: Supabase, referee: Referee, host: Player, bots: list[Player], tv: Player,
                     rng: random.Random, number: int, min_players: int, max_players: int,
-                    stall_rate: float) -> GameReport:
+                    stall_rate: float, agents: Agents | None = None) -> GameReport:
     table = [host, *rng.sample(bots, rng.randint(min_players, max_players) - 1)]
     staller = rng.choice(table[1:]) if rng.random() < stall_rate else None
     settings = {k: v for k, v in {"theme": rng.choice(THEMES), "region": rng.choice(REGIONS)}.items() if v}
@@ -332,6 +391,7 @@ async def play_game(sb: Supabase, referee: Referee, host: Player, bots: list[Pla
     referee.turn_seconds = 10 if staller else 20
     # A hang anywhere (a socket, the database) fails this game, not the whole run.
     limit = 120.0 + 10.0 * len(table) + 60.0 * STALLS_PER_GAME * report.staller + DELIVERY_TIMEOUT
+    limit += 20.0 * len(table) if agents else 0
     try:
         async with contextlib.AsyncExitStack() as stack:
             async def connect(player: Player) -> Player:
@@ -340,10 +400,12 @@ async def play_game(sb: Supabase, referee: Referee, host: Player, bots: list[Pla
 
             screens = [await connect(p) for p in table]  # table[0] is the host
             stalling = screens[table.index(staller)] if staller else None
-            game = Game(sb, referee, screens[0], screens, await connect(tv), rng, report, stalling)
+            game = Game(sb, referee, screens[0], screens, await connect(tv), rng, report, stalling, agents)
             await asyncio.wait_for(game.play(), limit)
     except TimeoutError:
         report.errors.append(f"the game hung: no result within {limit:.0f} s")
     except Exception as error:  # a crash is a failed game with its reason, not the end of the run
-        report.errors.append(f"{type(error).__name__}: {error}")
+        where = f" ({error.request.method} {error.request.url.path})" if isinstance(error, httpx.HTTPError) and \
+            getattr(error, "_request", None) else ""
+        report.errors.append(f"{type(error).__name__}{where}: {error}")
     return report

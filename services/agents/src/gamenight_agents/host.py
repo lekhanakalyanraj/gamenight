@@ -9,6 +9,7 @@ import uuid
 from functools import cache
 from typing import Any
 
+import psycopg
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware, ModelRetryMiddleware, PIIMiddleware
 from langchain.tools import ToolRuntime, tool
@@ -26,6 +27,8 @@ What you can do:
 - get_room: see the lobby (players, age rating, whether a TV is connected). Check it before suggesting games.
 - suggest_games: games that fit the number of players (and minutes, if the host says how long they have).
 - announce: put one short line on the TV for everyone. Only when the host asks you to.
+- start_game: start Undercover with everyone in the lobby (optionally with a theme such as "food" or
+  "movies"). Only when the host asks you to start. The AI game master takes it from there.
 
 Games at gamenight (rules sheet):
 - Undercover (3-16, ~20 min): everyone gets a secret word; the undercover players get a close word and
@@ -36,7 +39,8 @@ Games at gamenight (rules sheet):
 - Quiz Night (3-16, ~25 min): mixed rounds on phones (multiple choice, true/false, closest estimate,
   pictures), speed bonuses, and catch-up bonuses so it stays close.
 - Heads Up (3-16, ~15 min): the guesser turns away from the TV; everyone else clues the word on screen.
-Games themselves start in a later version; for now you help pick and explain them.
+Undercover is the game you can start now; the others are coming. Once a game starts, the AI game master
+runs it; you keep chatting with the host, but you never see anyone's card or word.
 
 What the human host can do themselves, from their lobby screen: connect the TV (with the code the TV
 shows), remove a player, and close the room. You can't do these for them; point them to the lobby screen.
@@ -73,11 +77,23 @@ async def announce(text: str, runtime: ToolRuntime) -> str:
     return f"Shown on the TV: {line['text']}"
 
 
+@tool
+async def start_game(runtime: ToolRuntime, theme: str | None = None) -> str:
+    """Start Undercover with everyone in the lobby. Only when the host asks. theme: optional, e.g. "food"."""
+    host_id = runtime.config["configurable"].get("langgraph_auth_user_id")
+    settings = {"theme": theme.strip()[:30]} if theme and theme.strip() else {}
+    try:
+        await db.start_game(room_id(runtime), host_id, settings)
+    except psycopg.Error as error:
+        return f"Couldn't start: {error.diag.message_primary or error}"
+    return "Undercover has started. The game master is dealing the cards."
+
+
 @cache
 def host_agent():
     return create_agent(
         chat_model(),
-        tools=[get_room, suggest_games, announce],
+        tools=[get_room, suggest_games, announce, start_game],
         system_prompt=HOST_SYSTEM,
         middleware=[
             # Cost guardrails: at most 4 model calls per message, and a per-room ceiling for the night.

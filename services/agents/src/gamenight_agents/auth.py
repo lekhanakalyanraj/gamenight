@@ -2,7 +2,9 @@
 
 Every request needs the internal service token. With a Supabase login on top it's a host acting through
 the web app's proxy; with the token alone it's the dispatcher. Hosts may only use the thread of a room
-they host (thread id = room id). Anything not explicitly allowed is denied.
+they host (thread id = room id). A game's thread (thread id = game id) holds every card in the game master's
+memory, so it's for the service token only: no room has a game's id, and game threads are refused outright
+as well. Anything not explicitly allowed is denied.
 """
 
 import asyncio
@@ -68,6 +70,8 @@ async def deny_by_default(ctx: Auth.types.AuthContext, value: dict) -> bool:
 async def _room_host_only(ctx: Auth.types.AuthContext, value: dict) -> bool:
     if SERVICE in ctx.permissions:
         return True
+    if (value.get("metadata") or {}).get("kind") == "game":
+        raise _forbidden("a game's thread is for the game master only")
     thread_id = value.get("thread_id")
     if HOST in ctx.permissions and thread_id and await db.is_room_host(str(thread_id), ctx.user.identity):
         return True

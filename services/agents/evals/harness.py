@@ -61,6 +61,10 @@ async def _host_say(room_id: str, text: str, kind: str, event_id: str | None = N
     return {"text": text}
 
 
+async def _start_game(room_id: str, host_id: str, settings: dict[str, Any]) -> dict[str, Any]:
+    return {"id": "eval-game", "phase": "setup", "settings": settings}  # the tool call itself is what's scored
+
+
 async def _list_games(players: int | None = None, minutes: int | None = None) -> list[dict[str, Any]]:
     return [g for g in GAMES if (not players or g["min_players"] <= players <= g["max_players"])
             and (not minutes or g["minutes"] <= minutes)]
@@ -69,7 +73,8 @@ async def _list_games(players: int | None = None, minutes: int | None = None) ->
 @contextmanager
 def offline(room: Room, announced: list[str]):
     """Point the agents' database and catalog calls at this case's fixtures (installed once, read per task)."""
-    db.room_snapshot, db.host_say, catalog.list_games = _room_snapshot, _host_say, _list_games
+    db.room_snapshot, db.host_say, db.start_game = _room_snapshot, _host_say, _start_game
+    catalog.list_games = _list_games
     token = _case.set((room, announced))
     try:
         yield

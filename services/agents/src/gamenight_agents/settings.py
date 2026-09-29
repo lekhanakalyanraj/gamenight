@@ -13,6 +13,16 @@ def database_url() -> str:
     return url
 
 
+@cache
+def game_master_database_url() -> str:
+    """Postgres as game_master_svc: the game master can only call game_api. A separate login from the host
+    agent's, so nothing running as the host agent can read a card."""
+    url = os.environ.get("GAME_MASTER_DATABASE_URL")
+    if not url:
+        raise RuntimeError("Set GAME_MASTER_DATABASE_URL (Postgres as game_master_svc).")
+    return url
+
+
 def model_provider() -> str:
     """'anthropic' (default) or 'fake': a scripted model for CI and offline runs, at no cost."""
     return os.environ.get("GAMENIGHT_MODEL", "anthropic")

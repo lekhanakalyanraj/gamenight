@@ -65,6 +65,7 @@ CATALOG_SERVICE_TOKEN ?= local-dev-catalog-token
 OTEL_ENV = $(if $(OTEL),OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318)
 agents-dev:      ## agents on LangGraph's dev server at :2024 (GAMENIGHT_MODEL=fake for a free scripted model)
 	cd services/agents && $(OTEL_ENV) AGENTS_DATABASE_URL=postgresql://agents_svc:local-dev-agents@$(LOCAL_DB) \
+	  GAME_MASTER_DATABASE_URL=postgresql://game_master_svc:local-dev-game-master@$(LOCAL_DB) \
 	  AGENTS_SERVICE_TOKEN=$(AGENTS_SERVICE_TOKEN) CATALOG_URL=http://127.0.0.1:8136 \
 	  CATALOG_SERVICE_TOKEN=$(CATALOG_SERVICE_TOKEN) uv run langgraph dev --port 2024 --no-browser --no-reload
 dispatcher-dev:  ## the dispatcher, pointed at agents-dev (health on :8134)
@@ -142,8 +143,10 @@ trace-check:     ## after a join, confirm one trace spans web, dispatcher, agent
 	python3 scripts/trace-check.py
 
 GAMES ?= 20
-simulate:        ## play GAMES simulated games (default 20) on the local stack; fails on any leak or unfinished game
+GM ?= referee
+simulate:        ## play GAMES simulated games (default 20); GM=agents plays the real game master (needs agents-dev, dispatcher-dev)
 	@key=$$(npx supabase status -o env | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$$/\1/p'); \
-	cd evals/simulator && SUPABASE_PUBLISHABLE_KEY=$$key uv run python -m gamenight_simulator --games $(GAMES)
+	cd evals/simulator && SUPABASE_PUBLISHABLE_KEY=$$key AGENTS_SERVICE_TOKEN=$(AGENTS_SERVICE_TOKEN) \
+	  uv run python -m gamenight_simulator --games $(GAMES) --game-master $(GM)
 simulator-test:  ## lint and unit-test the game simulator
 	cd evals/simulator && uv run ruff check . && uv run pytest -q

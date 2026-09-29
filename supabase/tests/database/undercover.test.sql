@@ -87,8 +87,8 @@ select is((select traceparent from dispatch.events where kind = 'game_started' a
 
 -- ---- setup and the deal --------------------------------------------------------------------------
 insert into content.word_pairs (theme, rating, word_a, word_b) values ('party', 'adult', 'tequila', 'mezcal');
-insert into ids (k, id) select 'adult_pair', id from content.word_pairs where word_a = 'tequila';
-insert into ids (k, id) select 'pair', id from content.word_pairs where word_a = 'coffee';
+insert into ids (k, id) select 'adult_pair', id from content.word_pairs where word_a = 'tequila' and theme = 'party';
+insert into ids (k, id) select 'pair', id from content.word_pairs where word_a = 'coffee' and source = 'seed';
 
 select throws_ok(format($$ set local role game_master_svc; select game_api.gm_setup(%L, %L, 1, 2, 20, gen_random_uuid()) $$,
                         pg_temp.id('game'), pg_temp.id('pair')),
