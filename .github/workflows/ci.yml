@@ -39,6 +39,20 @@ jobs:
       - run: make simulator-test
       - name: Game simulator (20 games, scripted game master; fails on any leak or unfinished game)
         run: make simulate GAMES=20
+      # The same bots against the real pipeline: dispatcher, Agent Server, the game master graph, the
+      # narrator's checks. GAMENIGHT_MODEL=fake plays scripted rules in place of the model, so it's free.
+      - name: Game master through the whole pipeline (10 games, scripted model)
+        run: |
+          GAMENIGHT_MODEL=fake make agents-dev > agents-dev.log 2>&1 &
+          make dispatcher-dev > dispatcher-dev.log 2>&1 &
+          for _ in $(seq 90); do
+            curl -sf http://127.0.0.1:2024/ok > /dev/null && curl -sf http://127.0.0.1:8134/healthz > /dev/null && break
+            sleep 2
+          done
+          make simulate GAMES=10 GM=agents
+      - name: Agent Server and dispatcher logs
+        if: failure()
+        run: tail -n 80 agents-dev.log dispatcher-dev.log
 
   web:
     name: web (typecheck, lint, build)

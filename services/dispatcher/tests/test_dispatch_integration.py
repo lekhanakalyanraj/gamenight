@@ -31,11 +31,11 @@ class FakeAgents:
         self.fail = fail
         self.runs: list[tuple[str, list[str]]] = []
 
-    async def start_run(self, room_id, events):
+    async def start_run(self, where, events):
         await asyncio.sleep(0.05)  # long enough for a concurrent dispatcher to try the same rows
         if self.fail:
             raise RuntimeError("agent server unavailable")
-        self.runs.append((room_id, [e.id for e in events]))
+        self.runs.append((where.thread_id, [e.id for e in events]))
 
 
 @pytest.fixture
@@ -120,8 +120,8 @@ def test_a_join_trace_continues_through_the_dispatcher_to_the_agents(room):
     handed: list[dict] = []
 
     class RecordingAgents:
-        async def start_run(self, room_id, events):
-            handed.append(run_metadata(room_id, events, current_traceparent()))
+        async def start_run(self, where, events):
+            handed.append(run_metadata(where, events, current_traceparent()))
 
     asyncio.run(dispatch_due(DISPATCHER_URL, RecordingAgents()))
 
@@ -132,18 +132,15 @@ def test_a_join_trace_continues_through_the_dispatcher_to_the_agents(room):
     assert handed[0]["traceparent"].split("-")[1:3] == [trace_id, format(span.context.span_id, "016x")]
 
 
-def test_game_events_wait_for_the_game_master(room):
+def test_game_events_go_to_the_games_own_thread(room):
+    game = str(uuid.uuid4())
     with psycopg.connect(ADMIN_URL, autocommit=True) as conn:
-        conn.execute("insert into dispatch.events (room_id, kind) values (%s, 'game_started')", (room,))
+        conn.execute("insert into dispatch.events (room_id, kind, payload) values (%s, 'game_started', %s)",
+                     (room, psycopg.types.json.Jsonb({"game_id": game, "step": 0})))
     agents = FakeAgents()
-    assert asyncio.run(dispatch_due(DISPATCHER_URL, agents)) == 2  # the two joins only
-    with psycopg.connect(ADMIN_URL) as conn:
-        kind, dispatched = conn.execute(
-            "select kind, dispatched_at is not null from dispatch.events "
-            "where room_id = %s and kind <> 'member_joined'",
-            (room,),
-        ).fetchone()
-    assert (kind, dispatched) == ("game_started", False)
+    assert asyncio.run(dispatch_due(DISPATCHER_URL, agents)) == 3
+    assert sorted(len(ids) for _, ids in agents.runs) == [1, 2]
+    assert {thread for thread, _ in agents.runs} == {room, game}  # the joins on the room's, the game's on its own
 
 
 def test_a_clue_turn_that_runs_out_moves_to_the_next_speaker(room):

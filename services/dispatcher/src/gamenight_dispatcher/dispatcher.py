@@ -15,7 +15,7 @@ from gamenight_dispatcher.outbox import (
     MARK_FAILED,
     MAX_ATTEMPTS,
     Event,
-    group_by_room,
+    group_by_thread,
     origin_traceparent,
 )
 from gamenight_dispatcher.telemetry import instruments, parent_context, tracer
@@ -32,19 +32,21 @@ async def dispatch_due(database_url: str, agents: Agents, batch_size: int = 50) 
                 rows = await (await conn.execute(CLAIM, (batch_size,))).fetchall()
                 if not rows:
                     return handed_over
-                for room_id, events in group_by_room([Event(*row) for row in rows]).items():
+                for where, events in group_by_thread([Event(*row) for row in rows]).items():
                     ids = [e.id for e in events]
                     # Continue the trace of the request that caused the event (e.g. the player's join).
                     with tracer().start_as_current_span(
                         "dispatch.room",
                         context=parent_context(origin_traceparent(events)),
                         kind=SpanKind.SERVER,  # serves the request that wrote the event: web → dispatcher
-                        attributes={"gamenight.room_id": room_id, "gamenight.events": len(events)},
+                        attributes={"gamenight.room_id": where.room_id, "gamenight.agent": where.assistant,
+                                    "gamenight.events": len(events)},
                     ) as span:
                         try:
-                            await agents.start_run(room_id, events)
+                            await agents.start_run(where, events)
                         except Exception as error:  # the Agent Server is down, slow or refusing: retry later
-                            log.warning("room %s: %d events not dispatched: %s", room_id, len(ids), error)
+                            log.warning("%s %s: %d events not dispatched: %s", where.assistant, where.thread_id,
+                                        len(ids), error)
                             span.record_exception(error)
                             await conn.execute(MARK_FAILED, (str(error), MAX_ATTEMPTS, ids))
                             instruments()["failed"].add(len(ids))
@@ -70,10 +72,11 @@ async def run(database_url: str, agents: Agents, stop: asyncio.Event, poll_secon
                     log.info("dispatched %d events", count)
             except psycopg.Error as error:
                 log.error("dispatch failed, will retry: %s", error)
-            async for _ in listener.notifies(timeout=poll_seconds, stop_after=1):
-                pass
-            if not stop.is_set():
-                await asyncio.sleep(batch_window)  # players often join together: one welcome, not five
+            woken_by = [n.payload async for n in listener.notifies(timeout=poll_seconds, stop_after=1)]
+            # Players often join together, so a moment's wait makes five joins one welcome. A game event can't
+            # wait: the room is looking at the TV for what happens next.
+            if not stop.is_set() and not any(p.startswith("game:") for p in woken_by):
+                await asyncio.sleep(batch_window)
 
 
 async def fire_deadlines(database_url: str, stop: asyncio.Event, every: float = 1.0) -> None:

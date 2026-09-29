@@ -59,4 +59,19 @@ def test_the_host_agent_gets_exactly_these_tools_and_none_that_read_hidden_infor
     monkeypatch.setenv("GAMENIGHT_MODEL", "fake")
     host.host_agent.cache_clear()
     tools = host.host_agent().nodes["tools"].bound._tools_by_name
-    assert set(tools) == {"get_room", "suggest_games", "announce"}
+    assert set(tools) == {"get_room", "suggest_games", "announce", "start_game"}
+
+
+def test_starting_a_game_is_for_the_verified_host_of_the_threads_room(monkeypatch):
+    started = []
+
+    async def start_game(room_id, host_id, settings):
+        started.append((room_id, host_id, settings))
+        return {"id": "game-1"}
+
+    monkeypatch.setattr(db, "start_game", start_game)
+    verified = SimpleNamespace(config={"configurable": {"thread_id": "room-1", "langgraph_auth_user_id": "host-9"}},
+                               tool_call_id="call-1")
+    reply = asyncio.run(host.start_game.coroutine(runtime=verified, theme="  food  "))
+    assert started == [("room-1", "host-9", {"theme": "food"})]  # the room and host come from the server, not chat
+    assert "started" in reply

@@ -46,6 +46,8 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # The agents reach the game database only as agents_svc (local login from supabase/seed.sql).
       AGENTS_DATABASE_URL: postgresql://agents_svc:local-dev-agents@host.docker.internal:55422/postgres
+      # The game master's own login: only game_api. The host agent's login above can't read a card.
+      GAME_MASTER_DATABASE_URL: postgresql://game_master_svc:local-dev-game-master@host.docker.internal:55422/postgres
       GAMENIGHT_MODEL: ${GAMENIGHT_MODEL:-anthropic}
       # Callers must send this token; hosts' logins are verified against Supabase's published keys.
       AGENTS_SERVICE_TOKEN: ${AGENTS_SERVICE_TOKEN:-local-dev-agents-token}

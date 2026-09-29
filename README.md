@@ -20,7 +20,7 @@ A multiplayer party-game platform: a **TV** hosts the room, players join from th
 | 0.5 | Security pipeline: SAST, secrets, dependency and workflow scanning, database advisors | **done** |
 | 1 | Live rooms without AI: TV pairs by code, join by QR, live lobby with presence, host removes players; every service as a signed, scanned image | **done** |
 | 2 | Dispatcher, supervisor, host chat, evals and red team, OpenTelemetry from tap to model call | **done** |
-| 3 | Undercover end to end: the game engine in Postgres, the AI game master, phones and TV, leak gates | **in progress** (3a: game engine and simulator) |
+| 3 | Undercover end to end: the game engine in Postgres, the AI game master, phones and TV, leak gates | **in progress** (3a merged; 3b: the AI game master) |
 | 4–7 | Narration voice, Quiz Night, Mafia, Heads Up | |
 | 8 | Eval suite, dashboards, load test | |
 
@@ -43,14 +43,14 @@ flowchart LR
 | Service | Runtime | Status | Owns |
 |---|---|---|---|
 | web | Next.js 16 | live: TV, phones, host | nothing: every write is an RPC as the signed-in user |
-| agents | LangGraph Agent Server (Python) | host chat and lobby welcomes | agent threads (its own Postgres) |
+| agents | LangGraph Agent Server (Python) | host chat, lobby welcomes, the Undercover game master | agent threads (its own Postgres) |
 | dispatcher | Python | outbox events to the agents; game timers | `dispatch` schema |
 | voice | Python, FastAPI | health only (narration audio in slice 4) | `narration` schema |
 | catalog | TypeScript | health only (catalogue API + MCP server in slice 9) | `catalog` schema |
 
 ## How a game runs
 
-Undercover is the first game. The database runs the rules and the game master makes the calls; for now the game master is a scripted referee, and the AI one comes next.
+Undercover is the first game. The database runs the rules, and an AI game master makes the calls.
 
 - **Postgres deals.** The game master picks a word pair and a role mix. Postgres then flips which word the civilians get and shuffles who gets which role, so the deal can't be rigged.
 - **Cards are private by construction.** A card lives in `secrets`, readable only by its owner and sent only on that player's own `member:{id}` Realtime topic.
@@ -60,13 +60,25 @@ Undercover is the first game. The database runs the rules and the game master ma
 - **The game master acts only through `game_api`,** with its own database login.
   - Every call names the event it handles, so a redelivered event applies once.
   - The host agent's login can't reach it.
+- **The AI game master** is a sly detective on Claude Haiku 4.5, in its own `game_master` graph.
+  - **Where it runs:** on a thread per game that only services can reach. Host chat never runs there, and the host's login can't open it.
+  - **How each turn works:** it gets the event and the whole game state, then acts through narrow tools. Setting up picks a fresh word pair for the room, fixes the role mix, deals and opens the first clues. Then it opens phases, counts votes, judges Mr. White's guess and narrates.
+  - **What the database does:** it refuses illegal moves, and the agent recovers from the reason it's given.
+  - **Out-of-date events** are dropped before any model call.
+- **Every line the AI host says passes three checks:**
+  - **code:** either word in any form (case, accents, plural, letters split up or reversed), or a hidden player named next to a role word;
+  - **a Haiku safety reviewer:** hints, and anything that doesn't suit the rating;
+  - **the database:** it refuses an exact live word.
+
+  A rejected line gets one rewrite; after that, a safe stock line is shown instead.
 - **Timers:** the dispatcher fires deadlines every second. A clue turn that runs out moves on by itself; a phase that runs out becomes an event for the game master.
 - **The host is in charge:** pause, extend a timer, skip a speaker or a phase, overrule the judge, end the game.
 - **A last line of defence:** the database refuses any host line that contains a live secret word.
 
-**The game simulator** (`evals/simulator`) plays whole games with bots, through the same RPCs and Realtime topics as phones.
+**The game simulator** (`evals/simulator`) plays whole games with bots, through the same RPCs and Realtime topics as phones. The game master is either a scripted referee (`make simulate`), or the whole pipeline: dispatcher, Agent Server, game master and narrator (`make simulate GM=agents`). With `GAMENIGHT_MODEL=fake` the pipeline's game master plays scripted rules, some of them deliberately leaky, for free.
 - **In every game, the bots probe for leaks:** they try to read each other's cards, listen on each other's private topics, and scan everything the TV received for a word or a role.
 - **They also try illegal moves,** which the database must refuse, and replay game-master events, which must apply once.
+- **Every line the AI host said is scanned too:** no word, and no player named with their true role before it was revealed.
 - **Any leak or unfinished game fails the run.** A game whose broadcasts Realtime lost (local Realtime restarts its database stream every 10 minutes) can't be fully scanned, so it's replayed instead of counted.
 
 ## Run it locally
@@ -94,6 +106,7 @@ make check        # pgTAP (RLS, RPCs, service isolation), database advisors, web
 make security     # gitleaks, Semgrep, OSV-Scanner, zizmor, actionlint, hadolint (needs Docker and uv)
 make images       # build every service image; make scan-<service> runs Grype on one
 make simulate     # 20 simulated games of Undercover on the local stack; fails on any leak (GAMES=50 for more)
+make simulate GM=agents   # the same, with the real pipeline as game master (run agents-dev and dispatcher-dev first)
 make dast         # OWASP ZAP baseline against a running web app (DAST_TARGET=...)
 make hooks        # install pre-commit hooks (gitleaks, ruff)
 npm run test:e2e -w @gamenight/web   # Playwright: a TV and five phones through a whole lobby (needs Supabase running)
@@ -106,7 +119,7 @@ Every PR runs the checks below; they also run daily on main, so newly disclosed 
 | Check | Tool | What it guards |
 |---|---|---|
 | Row-level security and RPCs | pgTAP | Players only see their own cards and rooms; every table has RLS; only the room and game RPCs are callable |
-| Game secrets | Game simulator | Bots play whole games while trying to read others' cards, join others' private topics and spot a word in anything public: any leak fails CI |
+| Game secrets | Game simulator | Bots play whole games while trying to read others' cards, join others' private topics and spot a word or a hidden role in anything public, including every line the AI host says: any leak fails CI |
 | Database advisors | Supabase splinter | Misconfigured RLS, exposed `SECURITY DEFINER` functions, mutable `search_path` |
 | Static analysis | Semgrep (community + [custom rules](.semgrep/)), CodeQL | Injection, XSS, and repo rules: no RLS-bypass key, no raw HTML, writes only through RPCs |
 | Secrets | gitleaks | Keys in any commit, ever |

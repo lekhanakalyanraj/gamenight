@@ -46,7 +46,8 @@ select public.join_room((select code from r), 'Ben');
 select pg_temp.act_as_admin();
 select is((select count(*)::int from dispatch.events where room_id = (select id from r)), 3,
           'leaving and rejoining counts as a new join');
-select is((select traceparent from dispatch.events where payload ->> 'nickname' = 'Ben' limit 1), null,
+select is((select traceparent from dispatch.events
+           where room_id = (select id from r) and payload ->> 'nickname' = 'Ben' limit 1), null,
           'a request without a traceparent gives an event without one');
 
 -- ---- who can see and work the outbox --------------------------------------------------------

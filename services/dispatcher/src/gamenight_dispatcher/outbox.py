@@ -6,7 +6,7 @@ accepted, so several dispatchers can run side by side without ever handing out t
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
 MAX_ATTEMPTS = 5
 
@@ -15,7 +15,6 @@ select id::text, room_id::text, kind, payload, traceparent, attempts,
        extract(epoch from now() - created_at) * 1000 as waited_ms
 from dispatch.events
 where dispatched_at is null and failed_at is null and next_attempt_at <= now()
-  and kind = 'member_joined'  -- game events stay queued until the game master can take them
 order by created_at
 limit %s
 for update skip locked
@@ -48,20 +47,35 @@ class Event:
     waited_ms: float = 0.0
 
 
-def group_by_room(events: list[Event]) -> "OrderedDict[str, list[Event]]":
-    """One run per room per batch, in arrival order: several players joining become one welcome."""
-    rooms: OrderedDict[str, list[Event]] = OrderedDict()
+class Route(NamedTuple):
+    """Which agent handles an event, on which thread."""
+
+    assistant: str
+    thread_id: str
+    room_id: str
+
+
+def route(event: Event) -> Route:
+    """Game events go to the game master on the game's own thread (services only: it holds every card);
+    lobby events go to the room's supervisor, whose thread the host may read."""
+    if game_id := event.payload.get("game_id"):
+        return Route("game_master", game_id, event.room_id)
+    return Route("supervisor", event.room_id, event.room_id)
+
+
+def group_by_thread(events: list[Event]) -> "OrderedDict[Route, list[Event]]":
+    """One run per thread per batch, in arrival order: several players joining become one welcome."""
+    threads: OrderedDict[Route, list[Event]] = OrderedDict()
     for event in events:
-        rooms.setdefault(event.room_id, []).append(event)
-    return rooms
+        threads.setdefault(route(event), []).append(event)
+    return threads
 
 
-def run_input(room_id: str, events: list[Event]) -> dict[str, Any]:
-    return {
-        "kind": "event",
-        "room_id": room_id,
-        "events": [{"id": e.id, "kind": e.kind, "payload": e.payload} for e in events],
-    }
+def run_input(where: Route, events: list[Event]) -> dict[str, Any]:
+    relayed = [{"id": e.id, "kind": e.kind, "payload": e.payload} for e in events]
+    if where.assistant == "game_master":
+        return {"kind": "game_event", "game_id": where.thread_id, "room_id": where.room_id, "events": relayed}
+    return {"kind": "event", "room_id": where.room_id, "events": relayed}
 
 
 def origin_traceparent(events: list[Event]) -> str | None:
@@ -69,10 +83,13 @@ def origin_traceparent(events: list[Event]) -> str | None:
     return next((e.traceparent for e in events if e.traceparent), None)
 
 
-def run_metadata(room_id: str, events: list[Event], traceparent: str | None = None) -> dict[str, Any]:
+def run_metadata(where: Route, events: list[Event], traceparent: str | None = None) -> dict[str, Any]:
     """traceparent: the dispatch span's own context, so the agents' spans nest under it."""
-    return {
-        "room_id": room_id,
+    metadata = {
+        "room_id": where.room_id,
         "event_ids": [e.id for e in events],
         "traceparent": traceparent or origin_traceparent(events),
     }
+    if where.assistant == "game_master":
+        metadata |= {"kind": "game", "game_id": where.thread_id}
+    return metadata

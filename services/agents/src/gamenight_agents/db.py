@@ -25,6 +25,15 @@ async def host_say(room_id: str, text: str, kind: str, event_id: str | None = No
     return row[0] if isinstance(row[0], dict) else json.loads(row[0])
 
 
+async def start_game(room_id: str, host_id: str, settings: dict[str, Any]) -> dict[str, Any]:
+    """For the host the Agent Server verified; the database checks they host the room, as the Start button does."""
+    async with await psycopg.AsyncConnection.connect(database_url(), autocommit=True) as conn:
+        cur = await conn.execute("select row_to_json(g) from agents_api.start_game(%s, %s, %s) as g",
+                                 (room_id, host_id, json.dumps(settings)))
+        row = await cur.fetchone()
+    return row[0]
+
+
 async def is_room_host(room_id: str, user_id: str) -> bool:
     async with await psycopg.AsyncConnection.connect(database_url(), autocommit=True) as conn:
         cur = await conn.execute("select agents_api.is_room_host(%s, %s)", (room_id, user_id))

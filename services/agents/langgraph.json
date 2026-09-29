@@ -3,7 +3,8 @@
     "."
   ],
   "graphs": {
-    "supervisor": "./src/gamenight_agents/graphs/supervisor.py:graph"
+    "supervisor": "./src/gamenight_agents/graphs/supervisor.py:graph",
+    "game_master": "./src/gamenight_agents/graphs/game.py:graph"
   },
   "python_version": "3.12",
   "auth": {

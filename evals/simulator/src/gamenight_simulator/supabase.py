@@ -25,6 +25,7 @@ class Session:
 class Supabase:
     def __init__(self, url: str, key: str):
         self.url, self.key = url, key
+        self.traceparent: str | None = None  # sent with every call, so one game is one trace (see game.py)
         self.http = httpx.AsyncClient(base_url=url, headers={"apikey": key}, timeout=15.0)
 
     async def close(self) -> None:
@@ -49,9 +50,11 @@ class Supabase:
     async def sign_up(self, email: str, password: str, display_name: str) -> Session:
         return await self._sign_up({"email": email, "password": password, "data": {"display_name": display_name}})
 
-    @staticmethod
-    def _auth(session: Session) -> dict[str, str]:
-        return {"Authorization": f"Bearer {session.token}"}
+    def _auth(self, session: Session) -> dict[str, str]:
+        headers = {"Authorization": f"Bearer {session.token}"}
+        if self.traceparent:  # the Data API hands it to Postgres, and the outbox records it with each event
+            headers["traceparent"] = self.traceparent
+        return headers
 
     async def rpc(self, session: Session, fn: str, **args: Any) -> Any:
         response = await self.http.post(f"/rest/v1/rpc/{fn}", json=args, headers=self._auth(session))

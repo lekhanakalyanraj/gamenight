@@ -2,8 +2,10 @@
 
     uv run python -m gamenight_simulator --games 20
 
-Needs the local Supabase stack (make db-start). Settings come from the environment, with local defaults:
-SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY (required), GAME_MASTER_DATABASE_URL, DISPATCHER_DATABASE_URL.
+Needs the local Supabase stack (make db-start). With --game-master agents, the real pipeline plays the game
+master, so the Agent Server and the dispatcher must be running too (make agents-dev, make dispatcher-dev).
+Settings come from the environment, with local defaults: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY (required),
+GAME_MASTER_DATABASE_URL, DISPATCHER_DATABASE_URL, AGENTS_URL, AGENTS_SERVICE_TOKEN.
 Exits non-zero if any game leaked, didn't finish, or broke a rule check.
 """
 
@@ -22,6 +24,7 @@ from collections import Counter
 
 import psycopg
 
+from gamenight_simulator.agents import Agents
 from gamenight_simulator.game import Player, play_game
 from gamenight_simulator.referee import Referee
 from gamenight_simulator.supabase import Supabase
@@ -47,6 +50,10 @@ async def run(args: argparse.Namespace) -> int:
                                     f"postgresql://dispatcher_svc:local-dev-dispatcher@{LOCAL_DB}")
     rng = random.Random(args.seed)
     sb = Supabase(url, key)
+    agents = None
+    if args.game_master == "agents":
+        agents = Agents(os.environ.get("AGENTS_URL", "http://127.0.0.1:2024"),
+                        os.environ.get("AGENTS_SERVICE_TOKEN", "local-dev-agents-token"))
 
     # One host account (fresh each run, with a throwaway password) and one pool of guests and a TV, reused
     # across games to stay well inside the local stack's sign-up rate limits.
@@ -72,19 +79,24 @@ async def run(args: argparse.Namespace) -> int:
                 if player.session.expires_at - time.time() < 600:
                     player.session = await sb.refresh(player.session)
             report = await play_game(sb, referee, host, bots, tv, rng, number, args.min_players, args.max_players,
-                                     args.stall_rate)
+                                     args.stall_rate, agents)
             reports.append(report)
             status = "skip" if report.inconclusive and not report.leaks and not report.errors else (
                 "ok  " if report.completed and not report.leaks else "FAIL")
             print(f"{status} game {number:>3}: {report.players:>2} players, {report.policy:<6} "
                   f"{'staller ' if report.staller else ''}-> {report.winner or '-'} in {report.rounds} rounds, "
-                  f"{report.seconds} s", flush=True)
+                  f"{report.seconds} s" + (f", {report.narrations} lines, game master {report.gm}" if agents else ""),
+                  flush=True)
             for problem in report.leaks + report.errors + [report.inconclusive or ""]:
                 if not problem:
                     continue
                 print(f"       {problem}", flush=True)
         ticker.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await ticker
     await sb.close()
+    if agents:
+        await agents.close()
 
     leaks = sum(len(r.leaks) for r in reports)  # a leak counts even in an inconclusive game
     conclusive = [r for r in reports if not r.inconclusive]
@@ -101,7 +113,16 @@ async def run(args: argparse.Namespace) -> int:
         "late_moves": sum(r.late_moves for r in reports),
         "winners": dict(Counter(r.winner or "none" for r in reports)),
         "average_seconds": round(sum(r.seconds for r in conclusive) / max(len(conclusive), 1), 1),
+        "narration_lines": sum(r.narrations for r in conclusive),
     }
+    if agents:
+        waits = sorted(s for r in conclusive for s in r.gm_seconds)
+        summary["game_master"] = {
+            **{k: sum(r.gm.get(k, 0) for r in conclusive) for k in ("runs", "stale_runs", "model_calls", "refused",
+                                                                   "lines_rejected")},
+            "wait_p50_seconds": waits[len(waits) // 2] if waits else None,
+            "wait_p95_seconds": waits[int(len(waits) * 0.95)] if waits else None,
+        }
     print(json.dumps(summary, indent=2))
     if args.report:
         with open(args.report, "w") as out:
@@ -117,6 +138,8 @@ def main() -> None:
     parser.add_argument("--max-players", type=int, default=10)
     parser.add_argument("--stall-rate", type=float, default=0.1, help="share of games with a player who stalls")
     parser.add_argument("--report", help="write a JSON report here")
+    parser.add_argument("--game-master", choices=["referee", "agents"], default="referee",
+                        help="referee: the simulator plays a scripted game master; agents: the real pipeline does")
     args = parser.parse_args()
     if not 3 <= args.min_players <= args.max_players <= len(NAMES) + 1:
         parser.error(f"players must be between 3 and {len(NAMES) + 1}")
