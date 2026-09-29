@@ -1,15 +1,23 @@
 name: evals
 
-# Tier 1 evals: the real host agent (Haiku) against the golden cases and a promptfoo red team mapped to
-# the OWASP Top 10 for LLM Applications and for Agentic Applications. Runs when the agents change, or on
-# demand. Report-only until slice 3: low scores don't fail the job, but a broken harness does.
-# The Anthropic key lives in the `evals` environment (its own workspace, $10/month limit) and is never
-# given to pull requests from forks.
+# The AI evals, on the real model (Haiku) with the Anthropic key in the `evals` environment (its own workspace,
+# $10/month limit), never given to pull requests from forks.
+#   tier 1: pull requests that change the agents, the game or the simulator; 3 real-model games
+#   tier 2: Mondays, if main has changed since the last run; 10 real-model games
+# Deterministic checks gate: the golden evals' hard checks, the leak attacks on the game master, narration's
+# hard checks, and 0 leaks in real-model games. Model-graded scores (judges, the host-chat red team) report.
+# The job always reports a result (skipped when nothing relevant changed), so it can be a required check.
 
 on:
   pull_request:
-    paths: ["services/agents/**", ".github/workflows/evals.yml"]
+  schedule:
+    - cron: "0 3 * * 1"
   workflow_dispatch:
+    inputs:
+      games:
+        description: Real-model games to play
+        type: number
+        default: 3
 
 permissions: {}
 
@@ -18,24 +26,71 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  tier1:
-    name: tier 1 (golden evals + red team, report-only)
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+  plan:
+    name: what to run
     runs-on: ubuntu-latest
-    environment: evals
-    timeout-minutes: 20
     permissions:
       contents: read
-    defaults:
-      run:
-        working-directory: services/agents
+      actions: read
+    outputs:
+      run: ${{ steps.plan.outputs.run }}
+      games: ${{ steps.plan.outputs.games }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          DISPATCH_GAMES: ${{ inputs.games }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          run=true
+          games=3
+          case "$EVENT" in
+            pull_request)
+              if [ "$SAME_REPO" != "true" ]; then
+                run=false
+              elif ! git diff --name-only "$BASE"...HEAD \
+                  | grep -qE '^(services/agents/|services/dispatcher/|evals/simulator/|supabase/migrations/|\.github/workflows/evals\.yml)'; then
+                run=false
+              fi ;;
+            schedule)
+              games=10
+              last=$(gh api "repos/$REPO/actions/workflows/evals.yml/runs?event=schedule&status=success&per_page=1" \
+                -q '.workflow_runs[0].head_sha // ""')
+              if [ "$last" = "$GITHUB_SHA" ]; then run=false; fi ;;
+            workflow_dispatch)
+              games=${DISPATCH_GAMES:-3} ;;
+          esac
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "games=$games" >> "$GITHUB_OUTPUT"
+          echo "Evals: run=$run, real-model games=$games" >> "$GITHUB_STEP_SUMMARY"
+
+  evals:
+    name: evals
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    environment: evals
+    timeout-minutes: 45
+    permissions:
+      contents: read
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GAMES: ${{ needs.plan.outputs.games }}
+      # CI-only internal tokens: the stack here is thrown away after the job.
+      AGENTS_SERVICE_TOKEN: ci-agents-token
+      CATALOG_SERVICE_TOKEN: ci-catalog-token
       # Attack data goes only to our model provider: no promptfoo cloud generation, telemetry or updates.
       PROMPTFOO_DISABLE_TELEMETRY: "1"
       PROMPTFOO_DISABLE_REMOTE_GENERATION: "true"
       PROMPTFOO_DISABLE_UPDATE: "1"
-      PROMPTFOO_FAILED_TEST_EXIT_CODE: "0" # report-only; errors still fail the step
+      PROMPTFOO_FAILED_TEST_EXIT_CODE: "0" # model-graded: reports; errors still fail the step
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -44,24 +99,60 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
+          cache: npm
+      - run: npm ci
       - run: uv sync --frozen
+        working-directory: services/agents
 
-      - name: Golden evals (28 cases, Haiku judge)
-        run: uv run python -m evals.run_golden --out golden-results.json
+      - name: Golden evals (hard checks gate; the judge's score reports)
+        working-directory: services/agents
+        run: uv run python -m evals.run_golden --gate --out golden-results.json
 
-      - name: Red team (promptfoo)
+      - name: Leak attacks on the game master (gate)
+        working-directory: services/agents
+        run: uv run python -m evals.run_leak_attacks --gate --out leak-results.json
+
+      - name: Narration (hard checks gate; the judge's score reports)
+        working-directory: services/agents
+        run: uv run python -m evals.run_narration --gate --out narration-results.json
+
+      - name: Red team on host chat (reports)
+        working-directory: services/agents
         run: |
           PROMPTFOO_PYTHON="$PWD/.venv/bin/python" \
             npx -y promptfoo@0.123.1 redteam run -c evals/redteam/promptfooconfig.yaml --no-cache \
             -o evals/redteam/redteam-results.json
           uv run python -m evals.summarise_redteam evals/redteam/redteam-results.json >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Start Supabase (only the services the games need)
+        run: npx supabase start -x studio,imgproxy,mailpit,storage-api,postgres-meta,edge-runtime,logflare,vector,supavisor
+      - name: "Real-model games through the whole pipeline (gate: every game finishes, 0 leaks)"
+        run: |
+          make agents-dev > agents-dev.log 2>&1 &
+          make dispatcher-dev > dispatcher-dev.log 2>&1 &
+          for _ in $(seq 90); do
+            curl -sf http://127.0.0.1:2024/ok > /dev/null && curl -sf http://127.0.0.1:8134/healthz > /dev/null && break
+            sleep 2
+          done
+          # Keep the simulator's exit code through the pipe: a leak or an unfinished game fails the step.
+          set +e
+          make simulate GAMES="$GAMES" GM=agents 2>&1 | tee games.log
+          status=${PIPESTATUS[0]}
+          { echo "## Real-model games"; echo '```'; tail -n 40 games.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      - name: Agent Server and dispatcher logs
+        if: failure()
+        run: tail -n 80 agents-dev.log dispatcher-dev.log
+
       - name: Keep the results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: evals-tier1
+          name: evals
           path: |
             services/agents/golden-results.json
+            services/agents/leak-results.json
+            services/agents/narration-results.json
             services/agents/evals/redteam/redteam-results.json
+            games.log
           retention-days: 30

@@ -161,3 +161,42 @@ def test_nothing_is_said_once_the_room_has_closed(shown, monkeypatch):
     monkeypatch.setattr(games, "say", closed)
     result = asyncio.run(narrator.narrate(Turn("g", EVENT, [], random.Random(1)), "And that's the game!"))
     assert result == {"shown": False, "reason": "the room is closed"}
+
+
+class FakeAgent:
+    """Stands in for the model-driven agent: the first run makes a move (or a line), and records each run."""
+
+    def __init__(self, first: str):
+        self.first, self.runs = first, []
+
+    async def ainvoke(self, state, config):
+        from langchain_core.messages import AIMessage
+
+        self.runs.append(state["messages"])
+        turn = current.get()
+        if len(self.runs) == 1 and self.first == "move":
+            turn.moved = True
+        if len(self.runs) == 1 and self.first == "move-and-line":
+            turn.moved, turn.lines_shown = True, 1
+        return {"messages": [*state["messages"], AIMessage("done")]}
+
+
+@pytest.mark.parametrize(("first", "nudged"), [("move", True), ("move-and-line", False), ("nothing", False)])
+def test_a_turn_that_moved_the_game_on_always_ends_with_a_line(monkeypatch, first, nudged):
+    agent = FakeAgent(first)
+
+    async def fake_state(game):
+        return {**state(), "votes": {}, "guess": None, "results": [],
+                "players": [{**p, "alive": True, "word": None, "in_room": True} for p in state()["players"]]}
+
+    monkeypatch.setattr(games, "state", fake_state)
+    monkeypatch.setattr(game_master, "game_master_agent", lambda: agent)
+    turn = Turn("g", EVENT, [], random.Random(1))
+    token = current.set(turn)
+    try:
+        asyncio.run(game_master.play(turn, {}))
+    finally:
+        current.reset(token)
+    assert len(agent.runs) == (2 if nudged else 1)
+    if nudged:
+        assert agent.runs[1][-1].content == game_master.NUDGE
