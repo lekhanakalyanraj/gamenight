@@ -1,0 +1,15 @@
+image: {repository: gamenight-catalog, tag: dev}
+user: 1000
+port: 8080
+probe: {path: /healthz}
+env:
+  PORT: "8080"
+secret: true  # CATALOG_DATABASE_URL (catalog_svc), CATALOG_SERVICE_TOKEN
+writable:
+  - {name: tmp, path: /tmp}
+resources:
+  requests: {cpu: 50m, memory: 96Mi}
+  limits: {cpu: 500m, memory: 256Mi}
+network:
+  ingressFrom: [agents]
+  supabase: [db]

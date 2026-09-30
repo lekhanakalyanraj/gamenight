@@ -11,6 +11,9 @@ GRYPE      = anchore/grype:v0.119.0@sha256:8c2c9234a345577a6d321a4753aa3ee1276d8
 SYFT       = anchore/syft:v1.52.0@sha256:500e2d872ac019436926e8322b4fc1f39441d94d21f6f4046c6ff29b30e8cb02
 HADOLINT   = hadolint/hadolint:v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d
 ZAP        = ghcr.io/zaproxy/zaproxy:2.17.0@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef
+HELM       = alpine/helm:4.3.0@sha256:a6cf54599ccb99d90cf0712b30f03fdb3cab062e6b94e0418cc4db7e8a1464b2
+KUBECONFORM = ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e
+KUBE_LINTER = stackrox/kube-linter:v0.8.3@sha256:f2bfce7879206d32f69ab6572c376f916643f54ca291ac38cf7d01ef591ff3f9
 LOCKFILES  = package-lock.json $(wildcard services/*/uv.lock) evals/simulator/uv.lock
 DOCKERFILES = apps/web/Dockerfile $(wildcard services/*/Dockerfile)
 
@@ -26,7 +29,7 @@ SCAN = docker run --rm -v "$(CURDIR)":/src -w /src \
 
 .PHONY: trace-check simulate simulator-test help images image-web image-catalog scan-image sbom security-docker dast services-test up down db-start db-stop db-reset db-test db-types db-advisors agents-build services-up services-down \
         agents-logs agents-dev dispatcher-dev voice-dev catalog-dev agents-test web lan web-check check security security-secrets security-sast security-deps \
-        security-workflows hooks
+        security-workflows hooks kind-up kind-deploy kind-netpol-test kind-down helm-deps helm-check
 
 help:            ## list commands
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/'
@@ -158,3 +161,45 @@ simulate:        ## play GAMES simulated games (default 20); GM=agents plays the
 	  uv run python -m gamenight_simulator --games $(GAMES) --game-master $(GM) $(if $(VOICE),--voice)
 simulator-test:  ## lint and unit-test the game simulator
 	cd evals/simulator && uv run ruff check . && uv run pytest -q
+
+# ---- Kubernetes (slice 4b): every service in a local kind cluster, deployed with Helm ----------------------------
+# Supabase stays outside the cluster (make db-start); pods reach it through the `supabase` Service.
+KIND_CLUSTER ?= gamenight
+KUBE = kubectl --context kind-$(KIND_CLUSTER) -n gamenight
+KIND_MODEL ?= fake
+CHART = infra/helm/gamenight
+
+kind-up:         ## create the local cluster: kind, metrics-server, and a namespace that enforces the restricted Pod Security profile
+	kind get clusters | grep -qx $(KIND_CLUSTER) || kind create cluster --config infra/kind/cluster.yaml --wait 120s
+	kubectl --context kind-$(KIND_CLUSTER) apply -f infra/kind/metrics-server.yaml
+	kubectl --context kind-$(KIND_CLUSTER) create namespace gamenight --dry-run=client -o yaml | kubectl --context kind-$(KIND_CLUSTER) apply -f -
+	kubectl --context kind-$(KIND_CLUSTER) label namespace gamenight --overwrite \
+	  pod-security.kubernetes.io/enforce=restricted pod-security.kubernetes.io/warn=restricted pod-security.kubernetes.io/audit=restricted
+
+helm-deps:       ## vendor the library chart into each service's chart
+	@for chart in $(CHART)/charts/*/; do docker run --rm -v "$(CURDIR)":/src -w /src $(HELM) dependency update $$chart >/dev/null || exit 1; done
+
+kind-deploy: images helm-deps ## build every image, load it into kind, make each service's Secret, and install the chart (KIND_MODEL=anthropic plays the real game master; GAMENIGHT_VOICE=elevenlabs speaks)
+	for s in $(SERVICES); do kind load docker-image $(IMAGE_PREFIX)-$$s:$(TAG) --name $(KIND_CLUSTER) || exit 1; done
+	scripts/kind-secrets.sh
+	helm upgrade --install gamenight $(CHART) --kube-context kind-$(KIND_CLUSTER) -n gamenight \
+	  --set global.supabase.hostIP=$$(scripts/kind-host-ip.sh) \
+	  --set agents.env.GAMENIGHT_MODEL=$(KIND_MODEL) --set voice.env.GAMENIGHT_VOICE=$(GAMENIGHT_VOICE) \
+	  --wait --timeout 10m
+	$(KUBE) rollout restart $(SERVICES:%=deployment/%) >/dev/null  # our images were rebuilt under the same tag
+	$(KUBE) rollout status deployment --timeout 5m
+	@echo "gamenight is up in kind: http://localhost:3400/tv"
+
+kind-netpol-test: ## prove the network policies are enforced: every allowed link connects, every forbidden one fails
+	scripts/kind-netpol-test.sh
+
+kind-down:       ## delete the local cluster
+	kind delete cluster --name $(KIND_CLUSTER)
+
+helm-check: helm-deps ## lint the chart, validate what it renders against the Kubernetes schemas, and scan it with kube-linter
+	docker run --rm -v "$(CURDIR)":/src -w /src $(HELM) lint $(CHART) --set global.supabase.hostIP=10.0.0.1
+	docker run --rm -v "$(CURDIR)":/src -w /src $(HELM) template gamenight $(CHART) -n gamenight \
+	  --set global.supabase.hostIP=10.0.0.1 > .helm-rendered.yaml
+	docker run --rm -v "$(CURDIR)":/src -w /src $(KUBECONFORM) -strict -summary -kubernetes-version 1.34.0 .helm-rendered.yaml; \
+	  status=$$?; docker run --rm -v "$(CURDIR)":/src -w /src $(KUBE_LINTER) lint .helm-rendered.yaml || status=1; \
+	  rm -f .helm-rendered.yaml; exit $$status

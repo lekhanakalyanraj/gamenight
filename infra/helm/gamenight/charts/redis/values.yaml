@@ -1,0 +1,15 @@
+image:
+  repository: redis
+  digest: sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499  # 7-alpine
+user: 999
+group: 1000
+port: 6379
+probe: {}  # a TCP check
+args: ["redis-server", "--save", "", "--appendonly", "no"]
+writable:
+  - {name: data, path: /data}
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 500m, memory: 256Mi}
+network:
+  ingressFrom: [agents]

@@ -1,0 +1,10 @@
+# Settings shared by every chart. Each service's own settings are in charts/<service>/values.yaml, and can be
+# overridden here under its name (for example `agents: {env: {GAMENIGHT_MODEL: anthropic}}`).
+global:
+  supabase:
+    # Supabase runs outside the cluster (the CLI locally, managed in production). This is the address pods reach
+    # it on: make kind-deploy finds the host's address as seen from the kind node.
+    hostIP: ""
+    ports:
+      api: 55421  # Auth, REST, Storage
+      db: 55422   # Postgres

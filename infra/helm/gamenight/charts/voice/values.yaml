@@ -1,0 +1,19 @@
+image: {repository: gamenight-voice, tag: dev}
+user: 10001
+port: 8080
+probe: {path: /healthz}
+env:
+  PORT: "8080"
+  SUPABASE_URL: http://supabase:55421
+  VOICE_STORAGE_EMAIL: voice@gamenight.test
+  GAMENIGHT_VOICE: fake  # a free tone; make kind-deploy GAMENIGHT_VOICE=elevenlabs speaks
+# DATABASE_URL (voice_svc), SUPABASE_PUBLISHABLE_KEY, VOICE_STORAGE_PASSWORD, ELEVENLABS_API_KEY
+secret: true
+writable:
+  - {name: tmp, path: /tmp}
+resources:
+  requests: {cpu: 50m, memory: 128Mi}
+  limits: {cpu: 500m, memory: 256Mi}
+network:
+  supabase: [api, db]
+  internet: true  # ElevenLabs

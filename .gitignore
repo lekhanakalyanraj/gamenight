@@ -18,3 +18,9 @@ playwright-report/
 services/agents/evals/redteam/redteam.yaml
 services/agents/evals/redteam/*-results.json
 golden-results.json
+
+# Helm: the library chart vendored into each service chart (make helm-deps; a local path, so no lock worth keeping),
+# and a scan's rendered manifests
+infra/helm/gamenight/charts/*/charts/
+infra/helm/gamenight/charts/*/Chart.lock
+.helm-rendered.yaml

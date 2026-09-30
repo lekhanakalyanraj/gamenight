@@ -1,0 +1,14 @@
+# The local Kubernetes cluster (make kind-up). One node is plenty for gamenight's services; kind's own network
+# plugin (kindnet) enforces NetworkPolicy, which `make kind-netpol-test` proves. The node image is the one this
+# kind version pins by digest.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: gamenight
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # web's NodePort, on this machine only: http://localhost:3400
+      - containerPort: 30310
+        hostPort: 3400
+        listenAddress: 127.0.0.1
+        protocol: TCP

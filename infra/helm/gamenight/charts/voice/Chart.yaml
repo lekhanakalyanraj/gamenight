@@ -1,0 +1,10 @@
+apiVersion: v2
+name: voice
+description: "The voice service: lines to audio clips (the only holder of the ElevenLabs key)."
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+dependencies:
+  - name: lib
+    version: 0.1.0
+    repository: file://../../../lib

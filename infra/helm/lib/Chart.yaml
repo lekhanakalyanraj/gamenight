@@ -1,0 +1,5 @@
+apiVersion: v2
+name: lib
+description: "gamenight's shared templates, so every service is deployed the same restricted way."
+type: library
+version: 0.1.0

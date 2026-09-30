@@ -1,0 +1,24 @@
+# The official image, pinned by digest. It runs as its own postgres user (uid 70 on Alpine), with its data and
+# socket directories writable and everything else read-only.
+image:
+  repository: postgres
+  digest: sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea  # 16-alpine
+user: 70
+port: 5432
+probe: {}  # a TCP check
+env:
+  POSTGRES_USER: postgres
+  POSTGRES_DB: langgraph
+  PGDATA: /var/lib/postgresql/data/pgdata
+secret: true  # POSTGRES_PASSWORD
+# Its data outlives the pod (a restart mustn't empty the database under the Agent Server): a volume from the
+# cluster's default storage class (kind's local-path).
+persistence: {name: data, path: /var/lib/postgresql/data, size: 1Gi}
+writable:
+  - {name: run, path: /var/run/postgresql}
+  - {name: tmp, path: /tmp}
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {cpu: "1", memory: 512Mi}
+network:
+  ingressFrom: [agents]

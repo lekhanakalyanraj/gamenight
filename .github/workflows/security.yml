@@ -43,6 +43,17 @@ jobs:
           persist-credentials: false
       - run: make security-docker
 
+  kubernetes:
+    name: kubernetes (helm lint, kubeconform, kube-linter)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: make helm-check
+
   secrets:
     name: secrets (gitleaks)
     runs-on: ubuntu-latest
