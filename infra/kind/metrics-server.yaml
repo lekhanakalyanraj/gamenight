@@ -1,5 +1,5 @@
 # metrics-server v0.9.0 (kubernetes-sigs/metrics-server release components.yaml), vendored so it's reviewed and
-# pinned. Two changes for kind: the image is pinned by digest, and --kubelet-insecure-tls, because kind's kubelets
+# pinned. Changes for kind: the image is pinned by digest, --kubelet-insecure-tls because kind's kubelets
 # serve self-signed certificates. It feeds the Agent Server's HorizontalPodAutoscaler.
 apiVersion: v1
 kind: ServiceAccount
@@ -195,7 +195,10 @@ metadata:
   labels:
     k8s-app: metrics-server
   name: v1beta1.metrics.k8s.io
-spec:
+# Upstream's default: metrics-server serves a self-signed certificate, so the API aggregation layer can't verify
+# it. Fine for a local kind cluster; a production cluster gives metrics-server a CA-signed certificate and sets
+# caBundle here instead.
+spec:  # nosemgrep: yaml.kubernetes.security.skip-tls-verify-service.skip-tls-verify-service
   group: metrics.k8s.io
   groupPriorityMinimum: 100
   insecureSkipTLSVerify: true
