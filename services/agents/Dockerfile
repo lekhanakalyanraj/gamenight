@@ -21,6 +21,10 @@ RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/con
  && rm -rf /app/datadog-init /dd_tracer \
  && useradd --system --uid 10001 --no-create-home app
 
-ENV LANGSERVE_GRAPHS='{"supervisor": "/deps/agents/src/gamenight_agents/graphs/supervisor.py:graph"}'
+# What langgraph.json configures for `langgraph dev`, the image must configure too: every graph, and the custom
+# auth (the internal service token, and hosts' logins). Without LANGGRAPH_AUTH the server accepts any request.
+# tests/test_image.py fails if these drift from langgraph.json.
+ENV LANGSERVE_GRAPHS='{"supervisor": "/deps/agents/src/gamenight_agents/graphs/supervisor.py:graph", "game_master": "/deps/agents/src/gamenight_agents/graphs/game.py:graph"}'
+ENV LANGGRAPH_AUTH='{"path": "/deps/agents/src/gamenight_agents/auth.py:auth"}'
 
 USER 10001

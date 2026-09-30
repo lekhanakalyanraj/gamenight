@@ -1,10 +1,11 @@
 """Chat models, chosen per role. Model IDs are pinned, never aliases, so behaviour only changes on purpose."""
 
-from itertools import cycle
+import re
+from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, AIMessageChunk
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 
 from gamenight_agents.settings import model_provider
 
@@ -17,8 +18,28 @@ FAKE_WELCOME = "Welcome to the room! Grab a seat, the games start soon."
 FAKE_CHAT_REPLY = "I'm your AI host! With this many players, Undercover is a great first game."
 
 
-class ScriptedChatModel(GenericFakeChatModel):
-    """A free, deterministic stand-in for Claude in CI: same interface, including tool binding."""
+class ScriptedChatModel(BaseChatModel):
+    """A free, deterministic stand-in for Claude in CI: the same reply every time, streamed word by word.
+
+    Only plain data, never an endless iterator (LangChain's GenericFakeChatModel takes one): the Agent Server
+    dumps a run's model to JSON, and dumping `cycle([...])` never finished, so the server ran out of memory.
+    """
+
+    reply: str
+
+    @property
+    def _llm_type(self) -> str:
+        return "scripted"
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs: Any) -> ChatResult:
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(self.reply))])
+
+    def _stream(self, messages, stop=None, run_manager=None, **kwargs: Any):
+        for token in re.findall(r"\S+\s*", self.reply):
+            chunk = ChatGenerationChunk(message=AIMessageChunk(content=token))
+            if run_manager:
+                run_manager.on_llm_new_token(token, chunk=chunk)
+            yield chunk
 
     def bind_tools(self, tools, **kwargs):  # the scripted replies never call tools
         return self
@@ -26,7 +47,7 @@ class ScriptedChatModel(GenericFakeChatModel):
 
 def host_model() -> BaseChatModel:
     if model_provider() == "fake":
-        return ScriptedChatModel(messages=cycle([AIMessage(FAKE_WELCOME)]))
+        return ScriptedChatModel(reply=FAKE_WELCOME)
     from langchain_anthropic import ChatAnthropic
 
     return ChatAnthropic(model=HOST_MODEL, max_tokens=120, temperature=0.8, max_retries=2, timeout=20)
@@ -35,7 +56,7 @@ def host_model() -> BaseChatModel:
 def chat_model() -> BaseChatModel:
     """The host agent's model for chat (tools bound by create_agent)."""
     if model_provider() == "fake":
-        return ScriptedChatModel(messages=cycle([AIMessage(FAKE_CHAT_REPLY)]))
+        return ScriptedChatModel(reply=FAKE_CHAT_REPLY)
     from langchain_anthropic import ChatAnthropic
 
     return ChatAnthropic(model=HOST_MODEL, max_tokens=400, temperature=0.5, max_retries=2, timeout=30)
