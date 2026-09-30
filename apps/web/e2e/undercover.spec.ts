@@ -67,6 +67,18 @@ test("a TV and five phones play a whole game, and nothing secret shows", async (
   await expect(tv).toHaveURL(/\/tv\/[A-Z0-9]{6}$/);
   const joinUrl = (await tv.getByTestId("join-qr").getAttribute("data-join-url")) ?? "";
 
+  // The AI host's voice: browsers block sound until someone taps, so the TV asks once. The host can turn it off
+  // (the TV shows it's off) and on again.
+  const narrator = tv.getByTestId("narrator");
+  await expect(narrator).toHaveAttribute("data-state", "locked");
+  await narrator.click();
+  await expect(narrator).toHaveAttribute("data-state", /ready|speaking/);
+  await expect(narrator).toContainText("AI voice");
+  await host.page.getByTestId("voice-switch").click();
+  await expect(narrator).toHaveAttribute("data-state", "off");
+  await host.page.getByTestId("voice-switch").click();
+  await expect(narrator).toHaveAttribute("data-state", /ready|speaking/);
+
   const phones: Phone[] = [host];
   for (const name of ["Asha", "Ben", "Chen", "Dara"]) {
     const guest = await newPhone(browser, name, cspViolations);
@@ -82,6 +94,9 @@ test("a TV and five phones play a whole game, and nothing secret shows", async (
   await host.page.getByRole("button", { name: "Start Undercover" }).click();
   await expect(tv.getByTestId("tv-game")).toBeVisible({ timeout: 30_000 });
   for (const phone of phones) await expect(phone.page.getByTestId("phone-game")).toBeVisible();
+
+  // The opening line is spoken: its clip arrives, downloads with the TV's login, and plays to the end.
+  await expect.poll(async () => Number(await narrator.getAttribute("data-played")), { timeout: 30_000 }).toBeGreaterThan(0);
 
   // Each phone peeks at its card once (hold, read, let go): it must turn face down again at once.
   const cards = new Map<string, string>();
@@ -141,6 +156,7 @@ test("a TV and five phones play a whole game, and nothing secret shows", async (
         reloaded = true;
         await tv.reload();
         await expect(tv.getByTestId("tv-game")).toBeVisible({ timeout: 30_000 });
+        await narrator.click(); // a reloaded page needs the tap again before it may play sound
       }
 
       await tapIfShown(page.getByRole("button", { name: "Done", exact: true }));

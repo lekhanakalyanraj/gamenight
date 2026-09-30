@@ -34,7 +34,7 @@ export default async function TvRoomPage({ params }: PageProps<"/tv/[code]">) {
 
   return (
     <TvLobby
-      lobby={{ room, members: room_members, displays: room_displays, hostLines: host_lines, game: game ? fromRow(game) : null }}
+      lobby={{ room, members: room_members, displays: room_displays, hostLines: host_lines, clips: [], game: game ? fromRow(game) : null }}
       userId={identity.userId}
       joinUrl={joinUrl}
       qr={qr}

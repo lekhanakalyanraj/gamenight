@@ -226,13 +226,13 @@ isOneToOne: false
                   ]
                 },"rooms": {
                   Row: {
-                    "age_rating": Database["public"]['Enums']["age_rating"],"closed_at": string | null,"code": string,"created_at": string,"host_id": string,"id": string,"max_players": number,"status": Database["public"]['Enums']["room_status"]
+                    "age_rating": Database["public"]['Enums']["age_rating"],"closed_at": string | null,"code": string,"created_at": string,"host_id": string,"id": string,"max_players": number,"status": Database["public"]['Enums']["room_status"],"voice": boolean
                   }
                   Insert: {
-                    "age_rating"?: Database["public"]['Enums']["age_rating"],"closed_at"?: string | null,"code": string,"created_at"?: string,"host_id": string,"id"?: string,"max_players"?: number,"status"?: Database["public"]['Enums']["room_status"]
+                    "age_rating"?: Database["public"]['Enums']["age_rating"],"closed_at"?: string | null,"code": string,"created_at"?: string,"host_id": string,"id"?: string,"max_players"?: number,"status"?: Database["public"]['Enums']["room_status"],"voice"?: boolean
                   }
                   Update: {
-                    "age_rating"?: Database["public"]['Enums']["age_rating"],"closed_at"?: string | null,"code"?: string,"created_at"?: string,"host_id"?: string,"id"?: string,"max_players"?: number,"status"?: Database["public"]['Enums']["room_status"]
+                    "age_rating"?: Database["public"]['Enums']["age_rating"],"closed_at"?: string | null,"code"?: string,"created_at"?: string,"host_id"?: string,"id"?: string,"max_players"?: number,"status"?: Database["public"]['Enums']["room_status"],"voice"?: boolean
                   }
                   Relationships: [
                     
@@ -277,7 +277,8 @@ isOneToOne: false
 "host_id": string,
 "id": string,
 "max_players": number,
-"status": Database["public"]['Enums']["room_status"]
+"status": Database["public"]['Enums']["room_status"],
+"voice": boolean
             }
                           SetofOptions: {
         from: "*"
@@ -467,6 +468,9 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"set_voice":
+{ Args: { "p_on": boolean,"p_room_id": string }; Returns: undefined
+                           },
 "settle_judgement":
 { Args: { "p_game_id": string,"p_overrule"?: boolean }; Returns: {
               "config": NonNullable<Json>,
