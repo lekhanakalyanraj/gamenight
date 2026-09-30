@@ -58,3 +58,38 @@ def test_the_eval_game_refuses_the_moves_the_database_would(monkeypatch):
         state["game"]["resolved"] = True  # once the verdict stands, the next round may start
         asyncio.run(games.open_phase(state["game"]["id"], "clues", None, "e"))
     assert case.state["game"]["phase"] == "clues"
+
+
+def test_the_eval_game_ends_on_the_databases_win_rule_and_the_next_round_opens_itself(monkeypatch):
+    import random
+
+    from evals import game_harness as h
+    from gamenight_agents import content, game_master, games, narrator
+    from gamenight_agents.turn import Turn, current
+
+    for module, names in ((games, ["state", "setup", "deal", "open_phase", "resolve_vote", "judge", "say"]),
+                          (content, ["pick_pair"]), (narrator, ["narrate"])):
+        for name in names:
+            monkeypatch.setattr(module, name, getattr(module, name))
+
+    def count(state, vote):
+        case = h.Game(state=state, names={}, vote_result=vote)
+        turn = Turn(state["game"]["id"], "5b2f8a4e-1c3d-4e5f-8a9b-0c1d2e3f4a5b", [], random.Random(1))
+        with h.offline(case):
+            token = current.set(turn)
+            try:
+                return asyncio.run(game_master.resolve_vote.coroutine()), case.state
+            finally:
+                current.reset(token)
+
+    # Ben out: 2 civilians against 2 infiltrators is level, not a win, so round 2's clues open.
+    result, after = count(*h.vote_out("Ben")[::2])
+    assert result["game_over"] is False and after["game"]["phase"] == "clues"
+    assert game_master.waiting_on_you(after) is None
+
+    # With Priya already out, Ben leaves one civilian: the infiltrators win and nothing more opens.
+    state, _, vote = h.vote_out("Ben")
+    next(p for p in state["players"] if p["nickname"] == "Priya")["alive"] = False
+    result, after = count(state, vote)
+    assert result["winner"] == "infiltrators" and result["game_over"] is True
+    assert after["game"]["phase"] == "ended" and "next_round" not in result

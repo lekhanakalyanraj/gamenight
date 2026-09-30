@@ -54,6 +54,7 @@ class Outcome:
     final_state: dict[str, Any]
     error: str | None = None
     refused: int = 0  # moves the rules refused (the game master had to recover)
+    stalls_caught: int = 0  # turns that left the game waiting, so the game master was asked again
 
 
 def moment(phase: str, *, nicknames: dict[str, str] | None = None, dealt: bool = True, **game: Any) -> dict[str, Any]:
@@ -137,8 +138,21 @@ async def _resolve_vote(game_id, event):
         if player["role"] == "mr_white":
             g.state["game"].update(phase="guess", guesser=out, phase_deadline="2099-01-01T00:00:00Z")
             return {**result, "guess": True}
+        result = {**result, "winner": _winner(g.state)}
+        if result["winner"]:
+            g.state["game"].update(phase="ended", winner=result["winner"])
+            for p in g.state["players"]:
+                p["revealed_role"] = p["role"]
     g.state["game"]["resolved"] = True
     return result
+
+
+def _winner(state: dict[str, Any]) -> str | None:
+    """private.undercover_winner: civilians when no infiltrator is left, infiltrators when one civilian is."""
+    alive = [p["role"] for p in state["players"] if p["alive"]]
+    if all(role == "civilian" for role in alive):
+        return "civilians"
+    return "infiltrators" if alive.count("civilian") <= 1 else None
 
 
 async def _judge(game_id, verdict, reasoning, event):
@@ -198,7 +212,7 @@ async def play(state: dict[str, Any], events: list[dict[str, Any]],
         finally:
             current.reset(token)
     return Outcome(case.shown, case.attempts, case.moves, case.verdict, turn.model_calls, case.state, error,
-                   turn.refused)
+                   turn.refused, turn.stalls_caught)
 
 
 # ---- game moments the evals put the game master in ------------------------------------------------------------
@@ -240,7 +254,7 @@ def game_started(nicknames: dict[str, str] | None = None) -> Moment:
 
 
 def vote_out(name: str) -> Moment:
-    """Round 1's votes are in, and `name` has the most."""
+    """Round 1's votes are in, and `name` has the most. A civilian out leaves 2 against 2: level, and not a win."""
     state, events, _ = vote_counted()
     return state, events, {"tie": False, "eliminated": member(name), "votes": state["votes"]}
 

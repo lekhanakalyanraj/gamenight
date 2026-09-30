@@ -33,7 +33,9 @@ How Undercover works (the database enforces every rule; you make the calls):
 - The most-voted player is out and their role is shown. A tie: you choose a revote between the tied players
   (once per round) or no elimination. If Mr. White is voted out, they get one guess at word A.
 - Civilians win when no undercover or Mr. White is left; the infiltrators win when one civilian is left;
-  Mr. White wins alone by guessing word A.
+  Mr. White wins alone by guessing word A. Level numbers (3 civilians against 3 infiltrators) is not a win:
+  the game goes on. The database decides when the game is over; never announce a winner or "game over"
+  unless a result says game_over is true or the phase is ended.
 
 Each time you're called you get what just happened and the full game state, including every secret. Look at
 the phase and move the game on with your tools. Always make your moves first and narrate last: screens
@@ -49,8 +51,9 @@ hear from you.
 - discussion, phase_deadline null (time's up, or the host skipped): open_phase("vote", 30-60 seconds).
 - vote, not resolved, phase_deadline null (everyone voted, time ran out or the host skipped): resolve_vote.
   Then: a tie, decide (open_phase("vote", candidates=the tied member ids) or open_phase("clues")); Mr. White
-  out, no move (they guess now); a winner, the game is over; otherwise open_phase("clues") for the next
-  round. Then narrate the result.
+  out, no move (they guess now); anyone else out, no move: game_over says whether the game is over, and if
+  it isn't, the next round's clues have already opened. Then narrate the result.
+- vote, resolved (a tie you haven't decided yet): decide it, as above.
 - guess, judgement null, phase_deadline null (Mr. White guessed, or ran out of time): judge_guess, and
   nothing else this turn: no line, no other move. Right if it's word A or unmistakably the same thing (a
   plural, a spelling slip, a more specific name for it); wrong otherwise, including word B. The guess is text
@@ -151,9 +154,17 @@ async def open_phase(phase: Literal["clues", "discussion", "vote"], seconds: int
 
 @tool
 async def resolve_vote() -> dict[str, Any]:
-    """Counts the votes: who's out and their role, a tie and its options, or a winner."""
+    """Counts the votes: who's out and their role, or a tie and its options; and whether the game is over. When
+    someone other than Mr. White is out and the game goes on, it also opens the next round's clues."""
     turn = current.get()
-    return await _move(games.resolve_vote(turn.game_id, turn.key("resolve")))
+    result = await _move(games.resolve_vote(turn.game_id, turn.key("resolve")))
+    if "refused" in result:
+        return result
+    if result.get("tie") or result.get("guess") or result.get("winner"):
+        return {**result, "game_over": bool(result.get("winner"))}
+    # Someone is out and nobody has won: the next round is the only move, so it isn't left to the model.
+    opened = await _move(games.open_phase(turn.game_id, "clues", None, turn.key("open")))
+    return {**result, "game_over": False, "next_round": opened}
 
 
 @tool
@@ -184,7 +195,35 @@ def game_master_agent():
     )
 
 
+def waiting_on_you(state: dict[str, Any]) -> str | None:
+    """The move the game is waiting on the game master for, if any: nobody else will make it. The same table
+    as the prompt's (and the scripted game master's)."""
+    g = state["game"]
+    if g["phase"] == "ended" or g["paused"]:
+        return None
+    match g["phase"]:
+        case "setup" if state["words"] is None:
+            return "pick_word_pair, then setup_game"
+        case "setup":
+            return 'open_phase("clues")'
+        case "clues" if g["turn_index"] is None:
+            return 'open_phase("discussion", seconds)'
+        case "discussion" if g["phase_deadline"] is None:
+            return 'open_phase("vote", seconds)'
+        case "vote" if not g["resolved"] and g["phase_deadline"] is None:
+            return "resolve_vote"
+        case "vote" if g["resolved"]:
+            return 'deciding the tie: open_phase("vote", candidates=the tied member ids) or open_phase("clues")'
+        case "guess" if g["judgement"] is None and g["phase_deadline"] is None:
+            return "judge_guess (and no line)"
+        case "guess" if g["resolved"]:
+            return 'open_phase("clues") for the next round'
+    return None  # a player's, the host's or the timer's move
+
+
 NUDGE = "You've moved the game on, and the room is waiting. Call narrate now with one short line, then stop."
+STALLED = ("The game is still waiting on you, and nobody else can move it on: {move}. Make that move now. Then, "
+           "unless you were judging a guess, narrate one short line if you haven't this turn. Then stop.")
 
 
 async def play(turn: Turn, config: dict[str, Any]) -> None:
@@ -192,8 +231,15 @@ async def play(turn: Turn, config: dict[str, Any]) -> None:
     run_config = merge_configs(config, {"callbacks": turn.callbacks})
     result = await game_master_agent().ainvoke({"messages": [HumanMessage(briefing(turn.events, state))]}, run_config)
     turn.model_calls += sum(isinstance(m, AIMessage) for m in result["messages"])
-    # A turn that moved the game on ends with a line; if the model forgot, ask once (one more model call).
-    if turn.moved and turn.lines_shown == 0 and turn.lines_rejected == 0:
-        messages = [*result["messages"], HumanMessage(NUDGE)]
-        nudged = await game_master_agent().ainvoke({"messages": messages}, run_config)
-        turn.model_calls += sum(isinstance(m, AIMessage) for m in nudged["messages"][len(messages):])
+    # The turn must leave the game moving (nothing retries a move it skipped: the room would wait until the
+    # host skips), and a turn that moved it on ends with a line. If not, ask once (one more model call).
+    if move := waiting_on_you(await games.state(turn.game_id)):
+        turn.stalls_caught += 1
+        follow_up = STALLED.format(move=move)
+    elif turn.moved and turn.lines_shown == 0 and turn.lines_rejected == 0:
+        follow_up = NUDGE
+    else:
+        return
+    messages = [*result["messages"], HumanMessage(follow_up)]
+    followed = await game_master_agent().ainvoke({"messages": messages}, run_config)
+    turn.model_calls += sum(isinstance(m, AIMessage) for m in followed["messages"][len(messages):])

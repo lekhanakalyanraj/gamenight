@@ -35,6 +35,7 @@ class GameState(TypedDict, total=False):
     model_calls: Annotated[int, add]
     refused: Annotated[int, add]
     lines_rejected: Annotated[int, add]
+    stalls_caught: Annotated[int, add]
 
 
 def live_events(events: list[dict[str, Any]], step: int) -> list[dict[str, Any]]:
@@ -59,7 +60,7 @@ async def run_game_master(state: GameState, config: RunnableConfig) -> dict:
         finally:
             current.reset(token)
     return {"events": None, "runs": 1, "model_calls": turn.model_calls, "refused": turn.refused,
-            "lines_rejected": turn.lines_rejected}
+            "lines_rejected": turn.lines_rejected, "stalls_caught": turn.stalls_caught}
 
 
 builder = StateGraph(GameState)
