@@ -202,6 +202,6 @@ helm-check: helm-deps ## lint the chart, validate what it renders against the Ku
 	docker run --rm -v "$(CURDIR)":/src -w /src $(HELM) lint $(CHART) --set global.supabase.hostIP=10.0.0.1
 	docker run --rm -v "$(CURDIR)":/src -w /src $(HELM) template gamenight $(CHART) -n gamenight \
 	  --set global.supabase.hostIP=10.0.0.1 > .helm-rendered.yaml
-	docker run --rm -v "$(CURDIR)":/src -w /src $(KUBECONFORM) -strict -summary -kubernetes-version 1.34.0 .helm-rendered.yaml; \
+	docker run --rm -v "$(CURDIR)":/src -w /src $(KUBECONFORM) -strict -summary -kubernetes-version 1.37.0 .helm-rendered.yaml; \
 	  status=$$?; docker run --rm -v "$(CURDIR)":/src -w /src $(KUBE_LINTER) lint .helm-rendered.yaml || status=1; \
 	  rm -f .helm-rendered.yaml; exit $$status
