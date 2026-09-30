@@ -202,7 +202,7 @@ Every service also runs in a local Kubernetes cluster ([kind](https://kind.sigs.
 ```bash
 make db-start kind-up kind-deploy   # the cluster, then every image built, loaded and installed: http://localhost:3400/tv
 make kind-netpol-test               # every allowed link between services connects; every forbidden one is blocked
-make helm-check                     # helm lint, kubeconform (Kubernetes 1.34 schemas), kube-linter
+make helm-check                     # helm lint, kubeconform (Kubernetes 1.37 schemas, what kind runs), kube-linter
 make kind-down
 ```
 
@@ -226,6 +226,14 @@ make kind-down
 - **Autoscaling example:** a HorizontalPodAutoscaler scales the Agent Server from 1 to 3 replicas at 70% CPU (metrics-server is installed in kind). The replicas share the Agent Server's Postgres and Redis, so they share one run queue.
 - **The Agent Server's own Postgres and Redis** are small charts on the official images, pinned by digest. The Postgres data is on a persistent volume, so restarting Postgres never empties the database under the Agent Server.
 - By default the cluster plays the free scripted model and the fake voice. `make kind-deploy KIND_MODEL=anthropic GAMENIGHT_VOICE=elevenlabs` switches to the real ones.
+- **CI deploys it on every relevant change** ([`kind.yml`](.github/workflows/kind.yml)):
+  1. build the images;
+  2. create the cluster with pinned, checksum-verified kind, Helm and kubectl;
+  3. install the chart;
+  4. run the network-policy test;
+  5. run the Playwright suite against the cluster: the lobby, host chat, a whole game with voice, and the security headers.
+
+  This tests the images as released, not the dev servers. It found two bugs the dev servers hid: the Agent Server image served only the host agent's graph without its custom auth, and a test-only model that no server could dump to JSON.
 
 ## Images and releases
 

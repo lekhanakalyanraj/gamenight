@@ -1,6 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 3100;
+// A deployment that's already running (the kind cluster: make kind-deploy, then PLAYWRIGHT_BASE_URL=http://localhost:3400).
+// Then nothing is started here: the tests run against that deployment as it is.
+const deployed = process.env.PLAYWRIGHT_BASE_URL;
 
 // End-to-end tests drive several browsers at once (a TV and phones) against the local Supabase stack.
 // Locally they reuse a running dev server; CI builds the app and runs `next start`.
@@ -12,7 +15,7 @@ export default defineConfig({
   retries: 0, // a flaky lobby is a bug to fix, not to retry away
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: `http://localhost:${PORT}`,
+    baseURL: deployed ?? `http://localhost:${PORT}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
@@ -20,7 +23,7 @@ export default defineConfig({
   // The web app plus the agent path: agents (LangGraph's in-memory dev server with the free scripted
   // model), the catalog, the dispatcher and the voice (a free tone), all against the local Supabase.
   // Locally, running ones are reused.
-  webServer: [
+  webServer: deployed ? [] : [
     {
       command: process.env.CI ? "npm run start" : "npm run dev",
       url: `http://localhost:${PORT}/tv`,

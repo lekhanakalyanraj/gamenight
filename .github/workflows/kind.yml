@@ -1,0 +1,108 @@
+name: kind
+
+# Every service deployed to a Kubernetes cluster (kind) exactly as `make kind-up kind-deploy` does, then proved:
+#   the network-policy test: every allowed link between services connects, every forbidden one is blocked
+#   Playwright against the cluster: a TV and phones through the lobby, host chat and a whole game
+# It runs the images as released (not the dev servers), with the free scripted model and the fake voice. It runs
+# when the Kubernetes side can change (the charts, the images, their dependencies, the schema) and on main; the
+# job always reports a result (skipped when nothing relevant changed), so it can be a required check.
+# The Agent Server image needs a LangSmith key to start: LANGSMITH_API_KEY, in the `kind` environment.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: what to run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      run: ${{ steps.plan.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          run=true
+          if [ "$EVENT" = "pull_request" ]; then
+            if [ "$SAME_REPO" != "true" ]; then
+              run=false  # the environment's secret is never given to pull requests from forks
+            elif ! git diff --name-only "$BASE"...HEAD \
+                | grep -qE '^(infra/|apps/web/|services/|packages/|supabase/migrations/|scripts/(kind-|install-kube-tools)|Makefile$|package-lock\.json$|\.github/workflows/kind\.yml$)'; then
+              run=false
+            fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "kind: run=$run" >> "$GITHUB_STEP_SUMMARY"
+
+  kind:
+    name: kind
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    environment: kind
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: kind, Helm and kubectl (pinned versions, verified checksums)
+        run: |
+          scripts/install-kube-tools.sh "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Start Supabase (outside the cluster, as in production)
+        run: npx supabase start -x studio,imgproxy,mailpit,postgres-meta,edge-runtime,logflare,vector,supavisor
+      - name: Create the cluster (restricted namespace, metrics-server)
+        run: make kind-up
+      - name: Build every image, load it, and install the chart (scripted model, fake voice)
+        run: make kind-deploy KIND_MODEL=fake GAMENIGHT_VOICE=fake
+      - name: Network policies are enforced (every allowed link connects, every forbidden one is blocked)
+        run: make kind-netpol-test
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+      - name: Playwright against the cluster
+        run: npm run test:e2e -w @gamenight/web
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3400
+      - name: Cluster state and logs
+        if: failure()
+        run: |
+          kubectl --context kind-gamenight -n gamenight get pods,hpa,events -o wide || true
+          for d in web agents dispatcher voice catalog agent-postgres redis; do
+            echo "=== $d"; kubectl --context kind-gamenight -n gamenight logs "deploy/$d" --tail=60 || true
+          done
+      - name: Keep the Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kind-playwright
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7
