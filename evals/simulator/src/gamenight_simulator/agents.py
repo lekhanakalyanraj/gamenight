@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-STATS = ("runs", "stale_runs", "model_calls", "refused", "lines_rejected")
+STATS = ("runs", "stale_runs", "model_calls", "refused", "lines_rejected", "stalls_caught")
 
 
 class Agents:
@@ -28,7 +28,8 @@ class Agents:
         return False
 
     async def game_stats(self, game_id: str) -> dict[str, Any]:
-        """The game master's totals for a game: runs, stale runs, model calls, refused moves, rejected lines."""
+        """The game master's totals for a game: runs, stale runs, model calls, refused moves, rejected lines, and
+        turns that left the game waiting (caught by its follow-up call)."""
         response = await self.http.get(f"/threads/{game_id}/state")
         if response.status_code == 404:
             return {}

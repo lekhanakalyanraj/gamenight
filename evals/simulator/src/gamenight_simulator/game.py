@@ -298,11 +298,19 @@ class Game:
         return leaks
 
     async def play(self) -> None:
+        # One trace per game: every call carries it, so each game-master run for this game joins the trace.
+        self.sb.traceparent = f"00-{uuid.uuid4().hex}-{uuid.uuid4().hex[:16]}-01"
+        room = await self.setup_room()
+        try:
+            await self.play_in(room)
+        finally:
+            # Close the room however the game ends: finished, hung, crashed or the run stopped. Closing it ends
+            # the game, so none is left behind with its timers still calling the game master (and the model).
+            await self.sb.rpc(self.host.session, "leave_room", p_room_id=room["id"])
+
+    async def play_in(self, room: dict[str, Any]) -> None:
         report, sb = self.report, self.sb
         started = time.monotonic()
-        # One trace per game: every call carries it, so each game-master run for this game joins the trace.
-        sb.traceparent = f"00-{uuid.uuid4().hex}-{uuid.uuid4().hex[:16]}-01"
-        room = await self.setup_room()
         game = await sb.rpc(self.host.session, "start_game", p_room_id=room["id"], p_kind="undercover",
                             p_settings=report.settings)
         self.game_id = game["id"]
@@ -312,8 +320,8 @@ class Game:
 
         # Generous: a normal game takes seconds; each stall waits out a timer of up to 60 s.
         timeout = 60.0 + 5.0 * len(self.table) + 60.0 * self.stalls_left
-        if self.agents is not None:  # each game-master turn is a few seconds of model calls
-            timeout += 20.0 * len(self.table)
+        if self.agents is not None:  # each game-master turn is several seconds of model calls, a few per round
+            timeout += 45.0 * len(self.table)
         while time.monotonic() - started < timeout:
             acted = await self.referee.act(self.game_id) if self.agents is None else False
             g = (await sb.select(self.tv.session, "games", id=self.game_id))[0]
@@ -338,8 +346,9 @@ class Game:
         if self.agents is not None and not await self.agents.wait_idle(self.game_id):
             report.errors.append("the game master was still busy 30 s after the game ended")
         # Local Realtime restarts its database stream every 10 minutes ("rebalancing"), and broadcasts sent
-        # during the gap are lost. A game that spans one can't be fully scanned, so it's inconclusive.
-        lost = await self.undelivered(room_topic)
+        # during the gap are lost. A game that spans one can't be fully scanned, so it's inconclusive. (A game
+        # that never ended has no end to deliver: that's its error above, not Realtime's.)
+        lost = await self.undelivered(room_topic) if g["phase"] == "ended" else []
         steps = {row.get("step") for table, row in map(record, self.tv.realtime.broadcasts.get(room_topic, []))
                  if table == "games"}
         if skipped := sorted(set(range(0, g.get("step", 0) + 1)) - steps):
@@ -373,12 +382,11 @@ class Game:
         report.seconds = round(time.monotonic() - started, 1)
         report.completed = g["phase"] == "ended" and not report.errors and not report.inconclusive
 
-        # Tidy up: stop listening, and close the room (a host may keep only 3 rooms open).
+        # Tidy up: stop listening (play closes the room; a host may keep only 3 rooms open).
         for player in [*self.table, self.tv]:
             for topic in list(player.realtime.broadcasts):
                 await player.realtime.leave(topic)
             player.realtime.broadcasts.clear()
-        await sb.rpc(self.host.session, "leave_room", p_room_id=room["id"])
 
 
 async def play_game(sb: Supabase, referee: Referee, host: Player, bots: list[Player], tv: Player,
@@ -391,7 +399,7 @@ async def play_game(sb: Supabase, referee: Referee, host: Player, bots: list[Pla
     referee.turn_seconds = 10 if staller else 20
     # A hang anywhere (a socket, the database) fails this game, not the whole run.
     limit = 120.0 + 10.0 * len(table) + 60.0 * STALLS_PER_GAME * report.staller + DELIVERY_TIMEOUT
-    limit += 20.0 * len(table) if agents else 0
+    limit += 45.0 * len(table) if agents else 0
     try:
         async with contextlib.AsyncExitStack() as stack:
             async def connect(player: Player) -> Player:

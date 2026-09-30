@@ -1,8 +1,8 @@
 """Narration eval: the real game master narrating 14 moments of a game, measured before it's tuned.
 
-For each moment: hard checks (no leak, at most 200 characters a line, a line when one is expected), how many of
-its lines the narrator rejected and why, and a Haiku judge's 1-5 score for the persona rubric. The judge score is
-model-graded, so it reports (security-and-delivery §6); the hard checks gate with --gate.
+For each moment: hard checks (no leak, at most 200 characters a line, a line when one is expected, the game left
+moving, no end announced early), how many of its lines the narrator rejected and why, and a Haiku judge's 1-5
+score for the persona rubric. The judge score is model-graded, so it reports; the hard checks gate with --gate.
 
 Usage: uv run python -m evals.run_narration [--only ID ...] [--gate] [--out narration-results.json]
 """
@@ -77,7 +77,8 @@ async def run(moment_id: str) -> dict[str, Any]:
     score, reason = await judge(moment_id, outcome.shown)
     return {"id": moment_id, "failed": failed, "shown": outcome.shown, "attempted": len(outcome.attempts),
             "rejected": [{"line": a["line"], "why": a.get("rejected") or a.get("note")} for a in rejected],
-            "refused": outcome.refused, "score": score, "reason": reason, "model_calls": outcome.model_calls}
+            "refused": outcome.refused, "stalls_caught": outcome.stalls_caught, "score": score, "reason": reason,
+            "model_calls": outcome.model_calls}
 
 
 def summary(results: list[dict[str, Any]], gated: bool) -> str:
@@ -91,7 +92,8 @@ def summary(results: list[dict[str, Any]], gated: bool) -> str:
         "",
         f"**{sum(not r['failed'] for r in results)}/{len(results)} passed** · mean judge **"
         f"{sum(scores) / max(len(scores), 1):.2f}/5** · **{rejected}/{attempted} lines rejected** "
-        f"({', '.join(f'{k}: {v}' for k, v in why.items()) or 'none'}) · model `{GAME_MASTER_MODEL}`",
+        f"({', '.join(f'{k}: {v}' for k, v in why.items()) or 'none'}) · "
+        f"**{sum(r['stalls_caught'] for r in results)} stalls caught** by the follow-up · model `{GAME_MASTER_MODEL}`",
         "",
         "| Moment | Checks | Judge | Said on the TV |",
         "|---|---|---|---|",

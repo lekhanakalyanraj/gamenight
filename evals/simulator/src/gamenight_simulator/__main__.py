@@ -24,7 +24,7 @@ from collections import Counter
 
 import psycopg
 
-from gamenight_simulator.agents import Agents
+from gamenight_simulator.agents import STATS, Agents
 from gamenight_simulator.game import Player, play_game
 from gamenight_simulator.referee import Referee
 from gamenight_simulator.supabase import Supabase
@@ -118,8 +118,7 @@ async def run(args: argparse.Namespace) -> int:
     if agents:
         waits = sorted(s for r in conclusive for s in r.gm_seconds)
         summary["game_master"] = {
-            **{k: sum(r.gm.get(k, 0) for r in conclusive) for k in ("runs", "stale_runs", "model_calls", "refused",
-                                                                   "lines_rejected")},
+            **{k: sum(r.gm.get(k, 0) for r in conclusive) for k in STATS},
             "wait_p50_seconds": waits[len(waits) // 2] if waits else None,
             "wait_p95_seconds": waits[int(len(waits) * 0.95)] if waits else None,
         }

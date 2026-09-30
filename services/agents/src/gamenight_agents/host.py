@@ -1,7 +1,7 @@
 """The host agent: the AI host the human host chats with from their phone.
 
 Its tools carry the host's privileges only. It can read the public lobby, ask the catalog for games
-and put a line on the TV. No tool can read hidden game information, now or later (security design §2).
+and put a line on the TV. No tool can read hidden game information, now or later.
 The room comes from the thread (thread id = room id, enforced by auth.py), never from the chat.
 """
 

@@ -24,6 +24,7 @@ class Turn:
     lines_rejected: int = 0
     refused: int = 0  # game-master moves the database refused (the illegal-move rate)
     moved: bool = False  # the game moved on this turn (a phase opened, a vote counted), so the room expects a line
+    stalls_caught: int = 0  # the turn ended with the game still waiting on the game master, so it was asked again
     model_calls: int = 0
     callbacks: list = field(default_factory=list)
     _moves: Counter = field(default_factory=Counter)
