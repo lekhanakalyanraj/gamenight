@@ -1,0 +1,28 @@
+image: {repository: gamenight-agents, tag: dev}
+user: 10001
+port: 8000
+probe: {path: /ok, initialDelaySeconds: 30}
+env:
+  REDIS_URI: redis://redis:6379
+  GAMENIGHT_MODEL: fake  # the free scripted model; make kind-deploy GAMENIGHT_MODEL=anthropic plays the real one
+  SUPABASE_JWKS_URL: http://supabase:55421/auth/v1/.well-known/jwks.json
+  SUPABASE_JWT_ISSUER: http://127.0.0.1:55421/auth/v1  # the issuer in Supabase's tokens (its public address)
+  CATALOG_URL: http://catalog:8080
+# DATABASE_URI (its own Postgres), AGENTS_DATABASE_URL and GAME_MASTER_DATABASE_URL (its two Supabase logins),
+# ANTHROPIC_API_KEY, LANGSMITH_API_KEY, AGENTS_SERVICE_TOKEN and CATALOG_SERVICE_TOKEN
+secret: true
+writable:
+  - {name: tmp, path: /tmp, size: 256Mi}
+resources:
+  requests: {cpu: 250m, memory: 512Mi}
+  limits: {cpu: "2", memory: 1Gi}
+# The autoscaling example: replicas share the Agent Server's Postgres and Redis, so they share its run queue.
+autoscaling: {enabled: true, minReplicas: 1, maxReplicas: 3, cpuPercent: 70}
+network:
+  ingressFrom: [web, dispatcher]
+  egressTo:
+    - {app: agent-postgres, port: 5432}
+    - {app: redis, port: 6379}
+    - {app: catalog, port: 8080}
+  supabase: [api, db]
+  internet: true  # Anthropic and LangSmith

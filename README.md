@@ -165,6 +165,7 @@ Every PR runs the checks below; they also run daily on main, so newly disclosed 
 | Dependencies | OSV-Scanner, dependency review, Dependabot | Known vulnerabilities in npm and PyPI packages; licences of new ones |
 | Service isolation | pgTAP | Each service's database role reaches only its own schema; none can call privileged functions |
 | Images | hadolint, Grype | Non-root, pinned base images; no fixable high or critical vulnerabilities (exceptions need a reason) |
+| Kubernetes | helm lint, kubeconform, kube-linter; the network-policy test in kind | Valid manifests; restricted pods (non-root, read-only, no capabilities); default-deny network policies that really block every link a service shouldn't have |
 | Headers and CSP | Playwright, OWASP ZAP (nightly) | Per-request CSP nonces, no violations, clickjacking and sniffing protection |
 | AI behaviour | Golden evals, leak attacks on the game master, narration checks, real-model games (gates); promptfoo red team (OWASP LLM + Agentic) | Prompt injection, secret and prompt leaks, tool misuse, off-rating content, staying in role |
 | CI itself | zizmor, actionlint, OpenSSF Scorecard | Actions pinned by SHA, least-privilege tokens, no script injection |
@@ -193,6 +194,38 @@ OTEL=1 make lan                # the dev servers can export too (also agents-dev
 ```
 
 Tracing is off unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set, so tests and CI are unaffected.
+
+## Kubernetes
+
+Every service also runs in a local Kubernetes cluster ([kind](https://kind.sigs.k8s.io/)), deployed by one Helm umbrella chart ([infra/helm/gamenight](infra/helm/gamenight)). Supabase stays outside the cluster (the CLI locally, managed in production), and pods reach it through a `supabase` Service whose one endpoint is the host.
+
+```bash
+make db-start kind-up kind-deploy   # the cluster, then every image built, loaded and installed: http://localhost:3400/tv
+make kind-netpol-test               # every allowed link between services connects; every forbidden one is blocked
+make helm-check                     # helm lint, kubeconform (Kubernetes 1.34 schemas), kube-linter
+make kind-down
+```
+
+- **A chart per service**, all built from one small library chart ([infra/helm/lib](infra/helm/lib)), so every pod runs the same way:
+  - **The `restricted` Pod Security profile, enforced by the namespace:** non-root, no privilege escalation, all capabilities dropped, seccomp, and a read-only root filesystem with small `emptyDir`s where a program needs to write.
+  - **Probes, requests and limits.**
+  - **No service-account token:** nothing talks to the Kubernetes API.
+- **Network policies deny everything by default.** Each service declares its links in its values, and its policy allows only those:
+
+  | From | May reach |
+  |---|---|
+  | the browser | web |
+  | web | agents, Supabase's API |
+  | dispatcher | agents, Supabase's Postgres |
+  | agents | its Postgres and Redis, the catalog, Supabase, HTTPS to public addresses (Anthropic, LangSmith) |
+  | voice | Supabase, HTTPS to public addresses (ElevenLabs) |
+  | catalog | Supabase's Postgres |
+
+  `make kind-netpol-test` proves the network plugin (kind's kindnet) enforces them, rather than trusting it. Probe pods carry each service's identity and try 14 allowed links, which must connect, and 15 forbidden ones, which must fail. For example, the same catalog port is open to agents but closed to web, and Supabase's API is open to web but its Postgres isn't.
+- **Secrets:** one per service, holding only what that service needs, made by `make kind-deploy` from `.env` and the local logins. Only voice holds the ElevenLabs key, and only agents the Anthropic key. Nothing sensitive is in the chart.
+- **Autoscaling example:** a HorizontalPodAutoscaler scales the Agent Server from 1 to 3 replicas at 70% CPU (metrics-server is installed in kind). The replicas share the Agent Server's Postgres and Redis, so they share one run queue.
+- **The Agent Server's own Postgres and Redis** are small charts on the official images, pinned by digest. The Postgres data is on a persistent volume, so restarting Postgres never empties the database under the Agent Server.
+- By default the cluster plays the free scripted model and the fake voice. `make kind-deploy KIND_MODEL=anthropic GAMENIGHT_VOICE=elevenlabs` switches to the real ones.
 
 ## Images and releases
 

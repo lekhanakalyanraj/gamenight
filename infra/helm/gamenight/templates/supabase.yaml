@@ -1,0 +1,39 @@
+# Supabase, outside the cluster, under one in-cluster name: `supabase:55421` (API) and `supabase:55422` (Postgres).
+# A Service with no selector, whose one endpoint is the host, so each service's NetworkPolicy can allow exactly
+# that address and those ports.
+{{- $supabase := .Values.global.supabase }}
+{{- $ip := required "global.supabase.hostIP is required (make kind-deploy sets it)" $supabase.hostIP }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: supabase
+  labels:
+    app.kubernetes.io/part-of: gamenight
+  annotations:
+    ignore-check.kube-linter.io/dangling-service: "no selector on purpose: its endpoint is Supabase, outside the cluster"
+spec:
+  ports:
+    {{- range $name, $port := $supabase.ports }}
+    - name: {{ $name }}
+      port: {{ $port }}
+      targetPort: {{ $port }}
+      protocol: TCP
+    {{- end }}
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: supabase-host
+  labels:
+    app.kubernetes.io/part-of: gamenight
+    kubernetes.io/service-name: supabase
+    endpointslice.kubernetes.io/managed-by: gamenight  # ours, not the endpoint controller's
+addressType: IPv4
+ports:
+  {{- range $name, $port := $supabase.ports }}
+  - name: {{ $name }}
+    port: {{ $port }}
+    protocol: TCP
+  {{- end }}
+endpoints:
+  - addresses: [{{ $ip | quote }}]

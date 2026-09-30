@@ -1,0 +1,7 @@
+{{ include "lib.deployment" . }}
+---
+{{ include "lib.service" . }}
+---
+{{ include "lib.networkpolicy" . }}
+---
+{{ include "lib.hpa" . }}

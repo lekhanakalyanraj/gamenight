@@ -1,0 +1,23 @@
+image: {repository: gamenight-web, tag: dev}
+user: 1000
+port: 3100
+probe: {path: /healthz}
+service: {type: NodePort, nodePort: 30310}  # kind maps it to http://localhost:3400
+env:
+  # The server reaches Supabase through the in-cluster `supabase` Service; browsers use the host's address.
+  SUPABASE_URL: http://supabase:55421
+  SUPABASE_BROWSER_URL: http://localhost:55421
+  PUBLIC_ORIGIN: http://localhost:3400
+  AGENTS_URL: http://agents:8000
+secret: true  # SUPABASE_PUBLISHABLE_KEY, AGENTS_SERVICE_TOKEN
+writable:
+  - {name: tmp, path: /tmp}
+  - {name: next-cache, path: /app/apps/web/.next/cache, size: 256Mi}
+resources:
+  requests: {cpu: 100m, memory: 192Mi}
+  limits: {cpu: "1", memory: 512Mi}
+network:
+  ingressFromAnywhere: true  # the browser, through the NodePort
+  egressTo:
+    - {app: agents, port: 8000}  # host chat
+  supabase: [api]

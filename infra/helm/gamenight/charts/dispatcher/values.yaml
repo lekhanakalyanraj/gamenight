@@ -1,0 +1,17 @@
+image: {repository: gamenight-dispatcher, tag: dev}
+user: 10001
+port: 8080
+probe: {path: /healthz}
+env:
+  PORT: "8080"
+  AGENTS_URL: http://agents:8000
+secret: true  # DATABASE_URL (dispatcher_svc), AGENTS_SERVICE_TOKEN
+writable:
+  - {name: tmp, path: /tmp}
+resources:
+  requests: {cpu: 50m, memory: 96Mi}
+  limits: {cpu: 500m, memory: 256Mi}
+network:
+  egressTo:
+    - {app: agents, port: 8000}
+  supabase: [db]

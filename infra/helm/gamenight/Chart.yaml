@@ -1,0 +1,15 @@
+apiVersion: v2
+name: gamenight
+description: "Every gamenight service in one release, each from its own chart (charts/), under the restricted Pod Security profile and default-deny network policies."
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+# Each service's chart, unpacked in charts/ (so there's nothing to fetch). Each depends on the library chart.
+dependencies:
+  - {name: web, version: 0.1.0}
+  - {name: agents, version: 0.1.0}
+  - {name: dispatcher, version: 0.1.0}
+  - {name: voice, version: 0.1.0}
+  - {name: catalog, version: 0.1.0}
+  - {name: agent-postgres, version: 0.1.0}
+  - {name: redis, version: 0.1.0}
