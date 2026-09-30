@@ -67,6 +67,14 @@ export async function hostControl(gameId: string, control: keyof typeof CONTROLS
   return error ? { error: friendlyError(error) } : {};
 }
 
+/** The host turns the AI host's voice on or off for the room. Off: captions only, nothing sent to text to speech. */
+export async function setVoice(roomId: string, on: boolean): Promise<{ error?: string }> {
+  if (!isUuid(roomId) || typeof on !== "boolean") return BAD;
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_voice", { p_room_id: roomId, p_on: on });
+  return error ? { error: friendlyError(error) } : {};
+}
+
 /** The host agrees with the AI's verdict on Mr. White's guess, or overrules it. */
 export async function settleVerdict(gameId: string, overrule: boolean): Promise<{ error?: string }> {
   if (!isUuid(gameId)) return BAD;

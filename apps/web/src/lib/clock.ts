@@ -9,13 +9,8 @@ import { serverNow } from "@/lib/server-time";
  * can be seconds off. Measured once per screen (half the round trip is the error bar), then ticks locally.
  */
 export function useNow(everyMs = 250): number {
-  const [offset, setOffset] = useState(0);
+  const offset = useServerOffset();
   const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const sent = Date.now();
-    void serverNow().then((server) => setOffset(server - (sent + Date.now()) / 2));
-  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), everyMs);
@@ -23,6 +18,16 @@ export function useNow(everyMs = 250): number {
   }, [everyMs]);
 
   return now + offset;
+}
+
+/** How far the server's clock is ahead of this device's, in milliseconds (0 until measured). */
+export function useServerOffset(): number {
+  const [offset, setOffset] = useState(0);
+  useEffect(() => {
+    const sent = Date.now();
+    void serverNow().then((server) => setOffset(server - (sent + Date.now()) / 2));
+  }, []);
+  return offset;
 }
 
 /** Seconds left until a deadline (never negative); null when there's no clock running. */

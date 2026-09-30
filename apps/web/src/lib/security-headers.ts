@@ -22,6 +22,8 @@ export function securityHeaders({ nonce, supabaseUrl, dev, https }: {
     // data: is for the join QR code, which is rendered on the server as a data URL.
     "img-src 'self' blob: data:",
     "font-src 'self'",
+    // blob: is for the narrator's voice: the TV downloads each clip with its own login, then plays it.
+    "media-src 'self' blob:",
     `connect-src 'self' ${supabase.origin} ${realtime}`,
     "object-src 'none'",
     "base-uri 'self'",

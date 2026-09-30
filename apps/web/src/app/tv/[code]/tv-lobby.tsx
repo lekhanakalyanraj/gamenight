@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { AgeBadge, HostCaption, PlayerCount, PlayerTile, RoomEnded } from "@/components/lobby";
+import { Narrator } from "@/components/narrator";
 import { ButtonLink } from "@/components/ui";
 import { useNow } from "@/lib/clock";
 import { type Lobby, useDisplayEvents, useLiveRoom } from "@/lib/realtime";
@@ -44,15 +45,19 @@ export function TvLobby({ lobby, userId, joinUrl, qr }: {
     );
   }
 
+  // Above the lobby and the game alike, so the voice carries on as the TV switches between them.
+  const narrator = <Narrator lines={live.hostLines} clips={live.clips} voiceOn={live.room.voice} />;
   const game = live.game;
   if (game && (game.game.phase !== "ended" || Date.parse(game.game.ended_at ?? "") > now - REVEAL_SECONDS * 1000)) {
-    return <TvGame live={{ ...live, game }} />;
+    return <>{narrator}<TvGame live={{ ...live, game }} /></>;
   }
 
   const players = activeMembers(live.members);
   const joinAddress = joinUrl.replace(/^https?:\/\//, "").replace(/\?.*$/, "");
 
   return (
+    <>
+    {narrator}
     <main className="grid min-h-dvh grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-10 p-10">
       <section className="flex flex-col items-center justify-center gap-6 rounded-3xl bg-surface p-8 text-center">
         <p className="font-mono text-lg tracking-[0.4em] text-accent">GAMENIGHT</p>
@@ -96,5 +101,6 @@ export function TvLobby({ lobby, userId, joinUrl, qr }: {
         </footer>
       </section>
     </main>
+    </>
   );
 }

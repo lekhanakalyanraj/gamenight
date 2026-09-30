@@ -212,6 +212,8 @@ class Worker:
 
     async def run(self, stop: asyncio.Event, poll_seconds: float = 5.0, sweep_every: float = 600.0) -> None:
         swept = 0.0
+        with contextlib.suppress(StorageError):  # it signs in again on the first clip if this fails
+            await self.storage.sign_in()
         while not stop.is_set():
             try:
                 connect = psycopg.AsyncConnection.connect(self.settings.database_url, autocommit=True)

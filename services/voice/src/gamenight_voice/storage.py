@@ -37,6 +37,10 @@ class Storage:
             self._token, self._expires = session["access_token"], time.monotonic() + session["expires_in"]
         return {"apikey": self.key, "authorization": f"Bearer {self._token}"}
 
+    async def sign_in(self) -> None:
+        """Signs in ahead of the first clip, so the first line of the night isn't the slow one."""
+        await self._auth()
+
     async def upload(self, path: str, audio: bytes, content_type: str, metadata: dict[str, str]) -> None:
         """Stores a clip. Clips are named by their content, so one that's already there is the same clip."""
         response = await self.http.post(

@@ -18,7 +18,8 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   // The web app plus the agent path: agents (LangGraph's in-memory dev server with the free scripted
-  // model), the catalog and the dispatcher, all against the local Supabase. Locally, running ones are reused.
+  // model), the catalog, the dispatcher and the voice (a free tone), all against the local Supabase.
+  // Locally, running ones are reused.
   webServer: [
     {
       command: process.env.CI ? "npm run start" : "npm run dev",
@@ -45,6 +46,14 @@ export default defineConfig({
       command: "make dispatcher-dev",
       cwd: "../..",
       url: "http://127.0.0.1:8134/healthz",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    {
+      command: "make voice-dev",
+      cwd: "../..",
+      url: "http://127.0.0.1:8135/healthz",
+      env: { GAMENIGHT_VOICE: "fake" },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
