@@ -20,6 +20,7 @@ from gamenight_simulator.leaks import broadcast_leaks, narration_leaks, private_
 from gamenight_simulator.realtime import Realtime
 from gamenight_simulator.referee import Referee
 from gamenight_simulator.supabase import RpcError, Session, Supabase
+from gamenight_simulator.voice import clip_gaps
 
 # Bots can't hear spoken clues, so a policy stands in for how well the table reads them:
 #   random: everyone votes at random
@@ -64,14 +65,18 @@ class GameReport:
     narrations: int = 0
     gm: dict[str, Any] = field(default_factory=dict)  # the AI game master's totals (agents mode)
     gm_seconds: list[float] = field(default_factory=list)  # how long each wait for the game master took
+    lines_seen: int = 0  # host lines the TV was shown
+    clip_seconds: list[float] = field(default_factory=list)  # for each voiced line: line to clip (the voice service)
     errors: list[str] = field(default_factory=list)
 
 
 class Game:
     def __init__(self, sb: Supabase, referee: Referee, host: Player, table: list[Player], tv: Player,
-                 rng: random.Random, report: GameReport, staller: Player | None, agents: Agents | None = None):
+                 rng: random.Random, report: GameReport, staller: Player | None, agents: Agents | None = None,
+                 voice: bool = False):
         self.sb, self.referee, self.host, self.table, self.tv = sb, referee, host, table, tv
         self.agents = agents  # None: the scripted referee plays the game master here; else the real pipeline does
+        self.voice = voice  # the voice service is running: every line the room is shown must get its clip
         self.gm_since: float | None = None
         self.seen_since: dict[tuple, float] = {}
         self.rng, self.report, self.staller = rng, report, staller
@@ -267,6 +272,16 @@ class Game:
             await asyncio.sleep(0.2)
         return missing
 
+    async def voiced(self, room_topic: str, wait: float = 5.0) -> tuple[int, list[float]]:
+        """The lines the TV was shown and their clip timings. With the voice service running, the last line's
+        clip can still be on its way when the game ends, so it waits a moment for it."""
+        started = time.monotonic()
+        while True:
+            shown, gaps = clip_gaps(self.tv.realtime.broadcasts.get(room_topic, []))
+            if not self.voice or len(gaps) >= shown or time.monotonic() - started > wait:
+                return shown, gaps
+            await asyncio.sleep(0.2)
+
     async def probe_topics(self) -> list[str]:
         """Every player, and the TV, tries to listen on someone else's private topic. All must be refused."""
         attempts = [(p, self.rng.choice([q for q in self.table if q is not p])) for p in self.table]
@@ -368,6 +383,10 @@ class Game:
                 report.leaks.append(f"{player.name} could read someone else's moves")
         if self.truth:
             report.leaks += await self.narration_scan(room["id"], g, words)
+        report.lines_seen, report.clip_seconds = await self.voiced(room_topic)
+        if self.voice and len(report.clip_seconds) < report.lines_seen:
+            report.errors.append(f"{report.lines_seen - len(report.clip_seconds)} of {report.lines_seen} lines "
+                                 "never got a clip")
         if self.agents is not None:
             report.gm = await self.agents.game_stats(self.game_id)
         if probes is not None:
@@ -391,7 +410,7 @@ class Game:
 
 async def play_game(sb: Supabase, referee: Referee, host: Player, bots: list[Player], tv: Player,
                     rng: random.Random, number: int, min_players: int, max_players: int,
-                    stall_rate: float, agents: Agents | None = None) -> GameReport:
+                    stall_rate: float, agents: Agents | None = None, voice: bool = False) -> GameReport:
     table = [host, *rng.sample(bots, rng.randint(min_players, max_players) - 1)]
     staller = rng.choice(table[1:]) if rng.random() < stall_rate else None
     settings = {k: v for k, v in {"theme": rng.choice(THEMES), "region": rng.choice(REGIONS)}.items() if v}
@@ -408,7 +427,7 @@ async def play_game(sb: Supabase, referee: Referee, host: Player, bots: list[Pla
 
             screens = [await connect(p) for p in table]  # table[0] is the host
             stalling = screens[table.index(staller)] if staller else None
-            game = Game(sb, referee, screens[0], screens, await connect(tv), rng, report, stalling, agents)
+            game = Game(sb, referee, screens[0], screens, await connect(tv), rng, report, stalling, agents, voice)
             await asyncio.wait_for(game.play(), limit)
     except TimeoutError:
         report.errors.append(f"the game hung: no result within {limit:.0f} s")

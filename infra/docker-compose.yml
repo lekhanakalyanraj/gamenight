@@ -85,6 +85,21 @@ services:
     image: gamenight-voice:dev
     build: { context: ../services/voice }
     ports: ["8125:8080"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    environment:
+      # The voice service's own logins (local ones from supabase/seed.sql): its queue as voice_svc, and the
+      # narration bucket as its Storage account. Only it holds the ElevenLabs key.
+      DATABASE_URL: postgresql://voice_svc:local-dev-voice@host.docker.internal:55422/postgres
+      SUPABASE_URL: http://host.docker.internal:55421
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+      VOICE_STORAGE_EMAIL: voice@gamenight.test
+      VOICE_STORAGE_PASSWORD: local-dev-voice-storage
+      # A free tone unless you opt in: GAMENIGHT_VOICE=elevenlabs in .env, with ELEVENLABS_API_KEY.
+      GAMENIGHT_VOICE: ${GAMENIGHT_VOICE:-fake}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      VOICE_MONTHLY_CHARACTERS: ${VOICE_MONTHLY_CHARACTERS:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: voice
 
   catalog:
     <<: *hardened

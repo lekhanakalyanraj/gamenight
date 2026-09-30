@@ -21,7 +21,8 @@ A multiplayer party-game platform: a **TV** hosts the room, players join from th
 | 1 | Live rooms without AI: TV pairs by code, join by QR, live lobby with presence, host removes players; every service as a signed, scanned image | **done** |
 | 2 | Dispatcher, supervisor, host chat, evals and red team, OpenTelemetry from tap to model call | **done** |
 | 3 | Undercover end to end: the game engine in Postgres, the AI game master, phones and TV, leak gates | **done** |
-| 4–7 | Narration voice, Quiz Night, Mafia, Heads Up | |
+| 4 | The narrator's voice: every line the TV shows is spoken (ElevenLabs), with captions | **in progress** (4.1: the voice pipeline) |
+| 5–7 | Quiz Night, Mafia, Heads Up | |
 | 8 | Eval suite, dashboards, load test | |
 
 ## Services
@@ -31,12 +32,13 @@ Five services, each with its own image, health check, database schema and login;
 ```mermaid
 flowchart LR
   TV["TV"] & Phone["Phones"] --> WEB["web · Next.js"]
-  TV & Phone -- "Realtime" --> SB[("Supabase<br/>Postgres · Auth · Realtime")]
+  TV & Phone -- "Realtime" --> SB[("Supabase<br/>Postgres · Auth · Realtime · Storage")]
   WEB -- "RPC as the player" --> SB
   WEB -- "host chat" --> AG["agents · LangGraph Agent Server"]
   SB -- "outbox events" --> DSP["dispatcher"] --> AG
   AG -- "gm_* RPCs" --> SB
-  SB -- "narration jobs" --> VOICE["voice"]
+  SB -- "lines to voice" --> VOICE["voice"] -- "clips" --> SB
+  VOICE -. "text to speech" .-> EL["ElevenLabs"]
   EXT["other AI agents"] -- "MCP" --> CAT["catalog"]
 ```
 
@@ -45,7 +47,7 @@ flowchart LR
 | web | Next.js 16 | live: TV, phones, host | nothing: every write is an RPC as the signed-in user |
 | agents | LangGraph Agent Server (Python) | host chat, lobby welcomes, the Undercover game master | agent threads (its own Postgres) |
 | dispatcher | Python | outbox events to the agents; game timers | `dispatch` schema |
-| voice | Python, FastAPI | health only (narration audio in slice 4) | `narration` schema |
+| voice | Python, FastAPI | voices every line the TV shows; the only holder of the ElevenLabs key | `narration` schema, the `narration` audio bucket |
 | catalog | TypeScript | health only (catalogue API + MCP server in slice 9) | `catalog` schema |
 
 ## How a game runs
@@ -83,6 +85,20 @@ Undercover is the first game. The database runs the rules, and an AI game master
   - **The CSP stays strict:** the animated screens render only in the browser, so the nonce-only style policy holds.
 - **A last line of defence:** the database refuses any host line that contains a live secret word.
 
+**The narrator's voice** (slice 4; the TV's playback arrives in 4.2). Every line the TV shows is also spoken.
+- **Only checked text is voiced.** A host line exists only after the narrator's checks. The line and its voicing request are written in the same transaction (an outbox in the voice service's own schema), so no line is shown without being queued, and nothing else can be voiced.
+- **Captions first, audio after.** The voice service turns the line into a clip with ElevenLabs (Flash v2.5, one voice per persona), stores it in a private bucket, and records it. The clip is broadcast to the room. If audio can't be made in time, the room still has the caption.
+- **Cost stays bounded:**
+  - a monthly character cap; once it's reached, the room gets captions only;
+  - a cache, so a line said before in the same voice costs nothing;
+  - a line more than 10 s old isn't voiced;
+  - two retries, then the line stays a caption.
+- **Who can reach the audio:**
+  - the voice service writes to Storage as its own account, marked as the voice service in metadata only an admin can set, so no service uses `service_role`;
+  - Storage's row-level security lets a player or TV download a clip only if it voices a line in a room they can view.
+- **Labelled as AI:** every clip says it's AI-generated in the file (an ID3 tag) and in its Storage metadata.
+- **Free to test:** `GAMENIGHT_VOICE=fake` speaks a short tone instead, so CI plays the whole path, and every line shown must get its clip.
+
 **The game simulator** (`evals/simulator`) plays whole games with bots, through the same RPCs and Realtime topics as phones. The game master is either a scripted referee (`make simulate`), or the whole pipeline: dispatcher, Agent Server, game master and narrator (`make simulate GM=agents`). With `GAMENIGHT_MODEL=fake` the pipeline's game master plays scripted rules, some of them deliberately leaky, for free.
 - **In every game, the bots probe for leaks:** they try to read each other's cards, listen on each other's private topics, and scan everything the TV received for a word or a role.
 - **They also try illegal moves,** which the database must refuse, and replay game-master events, which must apply once.
@@ -115,6 +131,7 @@ make security     # gitleaks, Semgrep, OSV-Scanner, zizmor, actionlint, hadolint
 make images       # build every service image; make scan-<service> runs Grype on one
 make simulate     # 20 simulated games of Undercover on the local stack; fails on any leak (GAMES=50 for more)
 make simulate GM=agents   # the same, with the real pipeline as game master (run agents-dev and dispatcher-dev first)
+make simulate GM=agents VOICE=1   # ...and every line must get its clip (run voice-dev too; a free tone by default)
 make dast         # OWASP ZAP baseline against a running web app (DAST_TARGET=...)
 make hooks        # install pre-commit hooks (gitleaks, ruff)
 npm run test:e2e -w @gamenight/web   # Playwright: a TV and five phones through a lobby and a whole game (needs Supabase running)
@@ -232,7 +249,7 @@ apps/web/              Next.js app
 packages/db-types/     TypeScript types generated from the schema (make db-types)
 services/agents/       LangGraph graphs, the Agent Server config and image
 services/dispatcher/   outbox consumer and game timers
-services/voice/        narration audio (skeleton)
+services/voice/        the narrator's voice: lines to audio clips
 services/catalog/      game catalogue API and MCP server (skeleton)
 supabase/migrations/   schema, RLS policies, RPCs, realtime triggers
 supabase/tests/        pgTAP tests

@@ -125,7 +125,7 @@ jobs:
           uv run python -m evals.summarise_redteam evals/redteam/redteam-results.json >> "$GITHUB_STEP_SUMMARY"
 
       - name: Start Supabase (only the services the games need)
-        run: npx supabase start -x studio,imgproxy,mailpit,storage-api,postgres-meta,edge-runtime,logflare,vector,supavisor
+        run: npx supabase start -x studio,imgproxy,mailpit,postgres-meta,edge-runtime,logflare,vector,supavisor
       - name: "Real-model games through the whole pipeline (gate: every game finishes, 0 leaks)"
         run: |
           make agents-dev > agents-dev.log 2>&1 &
