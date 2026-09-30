@@ -27,8 +27,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Start Supabase (only the services the tests need)
-        run: npx supabase start -x studio,imgproxy,mailpit,storage-api,postgres-meta,edge-runtime,logflare,vector,supavisor
+      - name: Start Supabase (only the services the tests need; Storage holds the narration audio)
+        run: npx supabase start -x studio,imgproxy,mailpit,postgres-meta,edge-runtime,logflare,vector,supavisor
       - run: npx supabase test db
       - name: Security advisors (splinter)
         run: make db-advisors
@@ -36,23 +36,29 @@ jobs:
       - name: Dispatcher against the real outbox (exactly-once, backoff, dead-letter, concurrency, timers)
         working-directory: services/dispatcher
         run: uv run pytest -q tests/test_dispatch_integration.py
+      - name: Voice worker against the real queue (voicing, cache, cap, retries, concurrency, clean-up)
+        working-directory: services/voice
+        run: uv run pytest -q tests/test_worker_integration.py
       - run: make simulator-test
       - name: Game simulator (20 games, scripted game master; fails on any leak or unfinished game)
         run: make simulate GAMES=20
       # The same bots against the real pipeline: dispatcher, Agent Server, the game master graph, the
-      # narrator's checks. GAMENIGHT_MODEL=fake plays scripted rules in place of the model, so it's free.
-      - name: Game master through the whole pipeline (10 games, scripted model)
+      # narrator's checks, and the voice service. GAMENIGHT_MODEL=fake plays scripted rules in place of the
+      # model and GAMENIGHT_VOICE=fake speaks a tone, so it's free; every line shown must get its clip.
+      - name: Game master and voice through the whole pipeline (10 games, scripted model, fake voice)
         run: |
           GAMENIGHT_MODEL=fake make agents-dev > agents-dev.log 2>&1 &
           make dispatcher-dev > dispatcher-dev.log 2>&1 &
+          GAMENIGHT_VOICE=fake make voice-dev > voice-dev.log 2>&1 &
           for _ in $(seq 90); do
-            curl -sf http://127.0.0.1:2024/ok > /dev/null && curl -sf http://127.0.0.1:8134/healthz > /dev/null && break
+            curl -sf http://127.0.0.1:2024/ok > /dev/null && curl -sf http://127.0.0.1:8134/healthz > /dev/null \
+              && curl -sf http://127.0.0.1:8135/healthz > /dev/null && break
             sleep 2
           done
-          make simulate GAMES=10 GM=agents
-      - name: Agent Server and dispatcher logs
+          make simulate GAMES=10 GM=agents VOICE=1
+      - name: Agent Server, dispatcher and voice logs
         if: failure()
-        run: tail -n 80 agents-dev.log dispatcher-dev.log
+        run: tail -n 80 agents-dev.log dispatcher-dev.log voice-dev.log
 
   web:
     name: web (typecheck, lint, build)
@@ -111,8 +117,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Start Supabase (auth, REST and Realtime)
-        run: npx supabase start -x studio,imgproxy,mailpit,storage-api,postgres-meta,edge-runtime,logflare,vector,supavisor
+      - name: Start Supabase (auth, REST, Realtime and Storage)
+        run: npx supabase start -x studio,imgproxy,mailpit,postgres-meta,edge-runtime,logflare,vector,supavisor
       - name: Give the app the local stack's publishable key
         run: npx supabase status -o env | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$/SUPABASE_PUBLISHABLE_KEY=\1/p' >> "$GITHUB_ENV"
       - run: npm run build -w @gamenight/web

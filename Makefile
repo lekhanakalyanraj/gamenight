@@ -25,7 +25,7 @@ SCAN = docker run --rm -v "$(CURDIR)":/src -w /src \
        -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src
 
 .PHONY: trace-check simulate simulator-test help images image-web image-catalog scan-image sbom security-docker dast services-test up down db-start db-stop db-reset db-test db-types db-advisors agents-build services-up services-down \
-        agents-logs agents-dev dispatcher-dev catalog-dev agents-test web lan web-check check security security-secrets security-sast security-deps \
+        agents-logs agents-dev dispatcher-dev voice-dev catalog-dev agents-test web lan web-check check security security-secrets security-sast security-deps \
         security-workflows hooks
 
 help:            ## list commands
@@ -71,6 +71,14 @@ agents-dev:      ## agents on LangGraph's dev server at :2024 (GAMENIGHT_MODEL=f
 dispatcher-dev:  ## the dispatcher, pointed at agents-dev (health on :8134)
 	cd services/dispatcher && $(OTEL_ENV) PORT=8134 AGENTS_URL=http://127.0.0.1:2024 AGENTS_SERVICE_TOKEN=$(AGENTS_SERVICE_TOKEN) \
 	  DATABASE_URL=postgresql://dispatcher_svc:local-dev-dispatcher@$(LOCAL_DB) uv run python -m gamenight_dispatcher
+GAMENIGHT_VOICE ?= fake
+voice-dev:       ## the voice service on :8135: a free tone by default; GAMENIGHT_VOICE=elevenlabs speaks (needs ELEVENLABS_API_KEY)
+	@key=$$(npx supabase status -o env | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$$/\1/p'); \
+	cd services/voice && $(OTEL_ENV) PORT=8135 GAMENIGHT_VOICE=$(GAMENIGHT_VOICE) \
+	  DATABASE_URL=postgresql://voice_svc:local-dev-voice@$(LOCAL_DB) \
+	  SUPABASE_URL=http://127.0.0.1:55421 SUPABASE_PUBLISHABLE_KEY=$$key \
+	  VOICE_STORAGE_EMAIL=voice@gamenight.test VOICE_STORAGE_PASSWORD=local-dev-voice-storage \
+	  uv run python -m gamenight_voice
 catalog-dev:     ## the catalog's games API on :8136
 	$(OTEL_ENV) PORT=8136 CATALOG_SERVICE_TOKEN=$(CATALOG_SERVICE_TOKEN) \
 	  CATALOG_DATABASE_URL=postgresql://catalog_svc:local-dev-catalog@$(LOCAL_DB) npm start -w @gamenight/catalog
@@ -144,9 +152,9 @@ trace-check:     ## after a join, confirm one trace spans web, dispatcher, agent
 
 GAMES ?= 20
 GM ?= referee
-simulate:        ## play GAMES simulated games (default 20); GM=agents plays the real game master (needs agents-dev, dispatcher-dev)
+simulate:        ## play GAMES simulated games (default 20); GM=agents plays the real game master (needs agents-dev, dispatcher-dev); VOICE=1 checks every line is voiced (needs voice-dev)
 	@key=$$(npx supabase status -o env | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$$/\1/p'); \
 	cd evals/simulator && SUPABASE_PUBLISHABLE_KEY=$$key AGENTS_SERVICE_TOKEN=$(AGENTS_SERVICE_TOKEN) \
-	  uv run python -m gamenight_simulator --games $(GAMES) --game-master $(GM)
+	  uv run python -m gamenight_simulator --games $(GAMES) --game-master $(GM) $(if $(VOICE),--voice)
 simulator-test:  ## lint and unit-test the game simulator
 	cd evals/simulator && uv run ruff check . && uv run pytest -q

@@ -28,9 +28,38 @@ begin
 end;
 $$;
 
+-- The voice service's Storage account (local only): it signs in like a user, and its app metadata (which only
+-- an admin can set) marks it as the voice service, the only account the narration bucket lets write.
+--   email:    voice@gamenight.test
+--   password: local-dev-voice-storage
+do $$
+declare
+  v_id uuid := 'aaaaaaaa-0000-4000-8000-00000000000f';
+begin
+  insert into auth.users (
+    instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+    raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+    confirmation_token, email_change, email_change_token_new, recovery_token
+  ) values (
+    '00000000-0000-0000-0000-000000000000', v_id, 'authenticated', 'authenticated',
+    'voice@gamenight.test', extensions.crypt('local-dev-voice-storage', extensions.gen_salt('bf')), now(),
+    '{"provider": "email", "providers": ["email"], "service": "voice"}', '{}', now(), now(),
+    '', '', '', ''
+  );
+
+  insert into auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+  values (
+    gen_random_uuid(), v_id, v_id::text,
+    jsonb_build_object('sub', v_id::text, 'email', 'voice@gamenight.test', 'email_verified', true),
+    'email', now(), now(), now()
+  );
+end;
+$$;
+
 -- Local-only logins for the services, so docker compose can connect each as its own role.
 -- Every other environment grants these out of band; the migrations create the roles without login.
 alter role dispatcher_svc login password 'local-dev-dispatcher';
 alter role agents_svc login password 'local-dev-agents';
 alter role catalog_svc login password 'local-dev-catalog';
 alter role game_master_svc login password 'local-dev-game-master';
+alter role voice_svc login password 'local-dev-voice';

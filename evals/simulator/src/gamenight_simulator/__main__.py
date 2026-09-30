@@ -79,13 +79,14 @@ async def run(args: argparse.Namespace) -> int:
                 if player.session.expires_at - time.time() < 600:
                     player.session = await sb.refresh(player.session)
             report = await play_game(sb, referee, host, bots, tv, rng, number, args.min_players, args.max_players,
-                                     args.stall_rate, agents)
+                                     args.stall_rate, agents, args.voice)
             reports.append(report)
             status = "skip" if report.inconclusive and not report.leaks and not report.errors else (
                 "ok  " if report.completed and not report.leaks else "FAIL")
             print(f"{status} game {number:>3}: {report.players:>2} players, {report.policy:<6} "
                   f"{'staller ' if report.staller else ''}-> {report.winner or '-'} in {report.rounds} rounds, "
-                  f"{report.seconds} s" + (f", {report.narrations} lines, game master {report.gm}" if agents else ""),
+                  f"{report.seconds} s" + (f", {report.narrations} lines, game master {report.gm}" if agents else "")
+                  + (f", {len(report.clip_seconds)}/{report.lines_seen} voiced" if report.clip_seconds else ""),
                   flush=True)
             for problem in report.leaks + report.errors + [report.inconclusive or ""]:
                 if not problem:
@@ -115,6 +116,14 @@ async def run(args: argparse.Namespace) -> int:
         "average_seconds": round(sum(r.seconds for r in conclusive) / max(len(conclusive), 1), 1),
         "narration_lines": sum(r.narrations for r in conclusive),
     }
+    # With the voice service running, how long lines waited for their clips (fake voice: our own overhead).
+    if clips := sorted(s for r in conclusive for s in r.clip_seconds):
+        summary["voice"] = {
+            "lines_shown": sum(r.lines_seen for r in conclusive),
+            "lines_voiced": len(clips),
+            "line_to_clip_p50_seconds": clips[len(clips) // 2],
+            "line_to_clip_p95_seconds": clips[int(len(clips) * 0.95)],
+        }
     if agents:
         waits = sorted(s for r in conclusive for s in r.gm_seconds)
         summary["game_master"] = {
@@ -137,6 +146,8 @@ def main() -> None:
     parser.add_argument("--max-players", type=int, default=10)
     parser.add_argument("--stall-rate", type=float, default=0.1, help="share of games with a player who stalls")
     parser.add_argument("--report", help="write a JSON report here")
+    parser.add_argument("--voice", action="store_true",
+                        help="the voice service is running: fail a game when a line it showed never got its clip")
     parser.add_argument("--game-master", choices=["referee", "agents"], default="referee",
                         help="referee: the simulator plays a scripted game master; agents: the real pipeline does")
     args = parser.parse_args()

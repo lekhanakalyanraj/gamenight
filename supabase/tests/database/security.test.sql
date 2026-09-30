@@ -17,7 +17,7 @@ select is_empty(
 select is_empty(
   $$ select n.nspname || '.' || p.proname
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-     where n.nspname in ('public', 'private', 'dispatch', 'agents_api', 'game_api', 'content') and p.prosecdef
+     where n.nspname in ('public', 'private', 'dispatch', 'narration', 'agents_api', 'game_api', 'content') and p.prosecdef
        and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) cfg where cfg like 'search_path=%') $$,
   'every SECURITY DEFINER function pins its search_path'
 );
@@ -42,14 +42,17 @@ select set_eq(
 
 select ok(
   not has_function_privilege('authenticated', 'public.handle_new_user()', 'execute')
-  and not has_function_privilege('authenticated', 'public.broadcast_room_member_change()', 'execute'),
+  and not has_function_privilege('authenticated', 'public.broadcast_room_member_change()', 'execute')
+  and not has_function_privilege('authenticated', 'private.enqueue_narration()', 'execute')
+  and not has_function_privilege('authenticated', 'private.broadcast_clip()', 'execute'),
   'trigger functions cannot be called directly'
 );
 
 select ok(
   has_function_privilege('authenticated', 'private.is_room_member(uuid)', 'execute')
   and has_function_privilege('authenticated', 'private.can_view_room(uuid)', 'execute')
-  and has_function_privilege('authenticated', 'private.can_access_topic(text)', 'execute'),
+  and has_function_privilege('authenticated', 'private.can_access_topic(text)', 'execute')
+  and has_function_privilege('authenticated', 'private.can_hear_clip(text)', 'execute'),
   'signed-in users can still evaluate the RLS helpers that policies depend on'
 );
 
