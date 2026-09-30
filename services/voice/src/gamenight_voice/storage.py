@@ -1,4 +1,5 @@
-"""The narration bucket, reached as the voice service's own Supabase Auth account (no service_role).
+"""The narration bucket, reached as the voice service's own Supabase Auth account (never the admin key that
+skips row-level security).
 
 Storage's row-level security lets only that account write or delete in the bucket, and lets a player or TV
 read a clip only if it voices a line in a room they can view.
