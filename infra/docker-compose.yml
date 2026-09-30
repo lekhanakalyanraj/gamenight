@@ -32,7 +32,7 @@ services:
   agent-server:
     image: gamenight-agents:dev
     build: { context: ../services/agents }
-    ports: ["8123:8000"]
+    ports: ["127.0.0.1:8123:8000"]  # this machine only: its callers are web and the dispatcher
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
     extra_hosts: ["host.docker.internal:host-gateway"]
