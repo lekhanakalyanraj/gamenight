@@ -21,7 +21,7 @@ A multiplayer party-game platform: a **TV** hosts the room, players join from th
 | 1 | Live rooms without AI: TV pairs by code, join by QR, live lobby with presence, host removes players; every service as a signed, scanned image | **done** |
 | 2 | Dispatcher, supervisor, host chat, evals and red team, OpenTelemetry from tap to model call | **done** |
 | 3 | Undercover end to end: the game engine in Postgres, the AI game master, phones and TV, leak gates | **done** |
-| 4 | The narrator's voice: every line the TV shows is spoken (ElevenLabs), with captions | **in progress** (4.1: the voice pipeline) |
+| 4 | The narrator's voice: every line the TV shows is spoken (ElevenLabs), with captions | **in progress** (4.1: the voice pipeline; 4.2: playback on the TV) |
 | 5–7 | Quiz Night, Mafia, Heads Up | |
 | 8 | Eval suite, dashboards, load test | |
 
@@ -85,7 +85,7 @@ Undercover is the first game. The database runs the rules, and an AI game master
   - **The CSP stays strict:** the animated screens render only in the browser, so the nonce-only style policy holds.
 - **A last line of defence:** the database refuses any host line that contains a live secret word.
 
-**The narrator's voice** (slice 4; the TV's playback arrives in 4.2). Every line the TV shows is also spoken.
+**The narrator's voice** (slice 4). Every line the TV shows is also spoken.
 - **Only checked text is voiced.** A host line exists only after the narrator's checks. The line and its voicing request are written in the same transaction (an outbox in the voice service's own schema), so no line is shown without being queued, and nothing else can be voiced.
 - **Captions first, audio after.** The voice service turns the line into a clip with ElevenLabs (Flash v2.5, one voice per persona), stores it in a private bucket, and records it. The clip is broadcast to the room. If audio can't be made in time, the room still has the caption.
 - **Cost stays bounded:**
@@ -97,7 +97,21 @@ Undercover is the first game. The database runs the rules, and an AI game master
   - the voice service writes to Storage as its own account, marked as the voice service in metadata only an admin can set, so no service uses `service_role`;
   - Storage's row-level security lets a player or TV download a clip only if it voices a line in a room they can view.
 - **Labelled as AI:** every clip says it's AI-generated in the file (an ID3 tag) and in its Storage metadata.
-- **Free to test:** `GAMENIGHT_VOICE=fake` speaks a short tone instead, so CI plays the whole path, and every line shown must get its clip.
+- **On the TV:**
+  - **"Start the show":** browsers block sound until someone taps, so the TV asks once, then plays every clip on the audio element that tap unlocked.
+  - **One at a time:** lines play in the order they were shown, never overlapping.
+  - **Late clips are skipped:** a clip that arrives more than 6 s after its caption, or waits 12 s behind others, isn't played.
+  - **Captions always,** with the "AI host" badge, and an "AI voice" marker while the voice is on.
+- **The host's switch:** "AI voice: on/off" in the lobby and the host drawer. While it's off, the TV shows "Voice off", and the database queues nothing for voicing, so a muted room spends no characters.
+- **Free to test:** `GAMENIGHT_VOICE=fake` speaks a short tone instead, so CI plays the whole path. Every line shown must get its clip, and Playwright checks that the TV plays one.
+- **How fast, measured:**
+
+  | Stage | p50 | p95 |
+  |---|---|---|
+  | narrate → caption (the narrator's checks, 352 real calls) | 1.87 s | 2.90 s |
+  | caption → clip ready (real ElevenLabs, 20 lines) | 0.56 s | about 1.0 s once warm |
+
+  That's about 2.4 s at p50 and 4 s at p95 from `narrate` to audio, the target, and most of it is the safety check, not the voice. `make voice-latency` repeats the real-voice timing (about 1,000 characters).
 
 **The game simulator** (`evals/simulator`) plays whole games with bots, through the same RPCs and Realtime topics as phones. The game master is either a scripted referee (`make simulate`), or the whole pipeline: dispatcher, Agent Server, game master and narrator (`make simulate GM=agents`). With `GAMENIGHT_MODEL=fake` the pipeline's game master plays scripted rules, some of them deliberately leaky, for free.
 - **In every game, the bots probe for leaks:** they try to read each other's cards, listen on each other's private topics, and scan everything the TV received for a word or a role.

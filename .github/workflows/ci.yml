@@ -58,7 +58,7 @@ jobs:
           make simulate GAMES=10 GM=agents VOICE=1
       - name: Agent Server, dispatcher and voice logs
         if: failure()
-        run: tail -n 80 agents-dev.log dispatcher-dev.log voice-dev.log
+        run: tail -n 80 agents-dev.log dispatcher-dev.log voice-dev.log || true  # absent if an earlier step failed
 
   web:
     name: web (typecheck, lint, build)

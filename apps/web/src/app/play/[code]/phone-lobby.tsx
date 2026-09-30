@@ -7,6 +7,7 @@ import { StartGame } from "@/components/game/start-game";
 import { useNow } from "@/lib/clock";
 import { AgeBadge, HostCaption, PlayerCount, PlayerTile, RoomEnded } from "@/components/lobby";
 import { Button, ButtonLink, Card, Field, Notice, Page } from "@/components/ui";
+import { VoiceSwitch } from "@/components/voice-switch";
 import { type Lobby, useLiveRoom } from "@/lib/realtime";
 import { activeMembers, latestHostLine, type LobbyDisplay, type LobbyMember } from "@/lib/room";
 import type { FormState } from "@/lib/validate";
@@ -79,6 +80,8 @@ export function PhoneLobby({ lobby, meId, isHost }: { lobby: Lobby; meId: string
       {isHost ? <HostChat roomId={live.room.id} /> : null}
 
       {isHost ? <TvPanel roomId={live.room.id} displays={live.displays} tvOnline={live.tvOnline} /> : null}
+
+      {isHost ? <VoiceSwitch roomId={live.room.id} on={live.room.voice} /> : null}
 
       <Card>
         <h2 className="mb-3 flex items-baseline justify-between gap-3 text-lg font-medium">

@@ -5,7 +5,9 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type Card, fromRow, GAME_SELECT, type LiveGame } from "@/lib/game";
-import { LOBBY_SELECT, type LobbyDisplay, type LobbyHostLine, type LobbyMember, type LobbyRoom } from "@/lib/room";
+import {
+  LOBBY_SELECT, type LobbyClip, type LobbyDisplay, type LobbyHostLine, type LobbyMember, type LobbyRoom,
+} from "@/lib/room";
 import { useSupabase } from "@/lib/supabase/client";
 
 /** What each device announces on the room's presence channel. Never trusted for names or game logic. */
@@ -16,6 +18,8 @@ export type Lobby = {
   members: LobbyMember[];
   displays: LobbyDisplay[];
   hostLines: LobbyHostLine[];
+  /** Audio for recent lines, as it arrives (live only: a clip that's late isn't worth playing, so never re-read). */
+  clips: LobbyClip[];
   /** The room's latest game, running or ended. */
   game: LiveGame | null;
 };
@@ -75,6 +79,8 @@ function applyGameChange(lobby: Lobby, change: Change): Lobby {
   return { ...lobby, game: { ...current, results: upsert(current.results, row as GameResult) } };
 }
 
+const MAX_CLIPS = 30;
+
 function applyChange(lobby: Lobby, change: Change): Lobby {
   if (change.table === "games" || change.table === "game_players" || change.table === "game_results") {
     return applyGameChange(lobby, change);
@@ -92,6 +98,11 @@ function applyChange(lobby: Lobby, change: Change): Lobby {
       return row ? { ...lobby, displays: upsert(lobby.displays, row as LobbyDisplay) } : lobby;
     case "host_lines":
       return row ? { ...lobby, hostLines: upsert(lobby.hostLines, row as LobbyHostLine) } : lobby;
+    case "clips": {
+      const clip = row as LobbyClip | null;
+      if (!clip || lobby.clips.some((c) => c.line_id === clip.line_id)) return lobby;
+      return { ...lobby, clips: [...lobby.clips, clip].slice(-MAX_CLIPS) };
+    }
     default:
       return lobby;
   }
@@ -128,10 +139,10 @@ export function useLiveRoom(initial: Lobby, presence: Presence): LiveRoom {
       return;
     }
     const { room_members, room_displays, host_lines, ...room } = data;
-    setLobby({
-      room, members: room_members, displays: room_displays, hostLines: host_lines,
+    setLobby((current) => ({
+      room, members: room_members, displays: room_displays, hostLines: host_lines, clips: current.clips,
       game: game ? fromRow(game) : null,
-    });
+    }));
   }, [roomId, supabase]);
 
   // The tab coming back to the foreground: re-read (a gap in the broadcasts is caught where they arrive).
@@ -181,8 +192,8 @@ export function useLiveRoom(initial: Lobby, presence: Presence): LiveRoom {
     };
   }, [roomId, supabase, refetch]);
 
-  const { room, members, displays, hostLines, game } = lobby;
-  return { room, members, displays, hostLines, game, online, tvOnline, connected, gone };
+  const { room, members, displays, hostLines, clips, game } = lobby;
+  return { room, members, displays, hostLines, clips, game, online, tvOnline, connected, gone };
 }
 
 /** A TV's own private topic: the database tells it when it's been paired to a room or disconnected. */

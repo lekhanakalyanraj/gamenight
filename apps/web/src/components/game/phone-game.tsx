@@ -126,7 +126,7 @@ export default function PhoneGame({ live, meId, isHost, onBackToLobby }: {
 
         {!live.connected ? <p role="status" className="text-center text-sm text-muted">Reconnecting…</p> : null}
       </main>
-      {isHost && game.phase !== "ended" ? <HostDrawer game={game} roomId={live.room.id} /> : null}
+      {isHost && game.phase !== "ended" ? <HostDrawer game={game} roomId={live.room.id} voice={live.room.voice} /> : null}
     </MotionConfig>
   );
 }

@@ -4,7 +4,7 @@ create extension if not exists pgtap with schema extensions;
 -- The narrator's voice: every host line is queued for voicing with it, only the voice service reaches its
 -- tables, and in the narration bucket only the voice service writes, while a room hears only its own clips.
 
-select plan(14);
+select plan(18);
 
 create function pg_temp.act_as(p_uid uuid, p_service text default null) returns void language sql as $$
   select set_config('role', 'authenticated', true),
@@ -85,6 +85,24 @@ select is((select count(*)::int from storage.objects where bucket_id = 'narratio
 select pg_temp.act_as('00000000-0000-0000-0000-000000000101');
 select is((select count(*)::int from storage.objects where bucket_id = 'narration' and name <> 'clips/abc.mp3'), 0,
           'a player can''t see other clips in the bucket');
+
+-- ---- the host's voice switch ---------------------------------------------------------------------------------
+select pg_temp.act_as('00000000-0000-0000-0000-000000000101');
+select throws_ok($$ select public.set_voice((select id from r), false) $$, '42501', null,
+                 'only the host can turn the voice off');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select public.set_voice((select id from r), false);
+select pg_temp.act_as_admin();
+select is((select voice from public.rooms where id = (select id from r)), false, 'the host turns the voice off');
+insert into public.host_lines (room_id, kind, text) values ((select id from r), 'narration', 'Said while muted.');
+select is((select count(*)::int from narration.requests q join public.host_lines l on l.id = q.line_id
+           where l.text = 'Said while muted.'), 0, 'while the voice is off, a line stays a caption: nothing is queued');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+select public.set_voice((select id from r), true);
+select pg_temp.act_as_admin();
+insert into public.host_lines (room_id, kind, text) values ((select id from r), 'narration', 'Back on air.');
+select is((select count(*)::int from narration.requests q join public.host_lines l on l.id = q.line_id
+           where l.text = 'Back on air.'), 1, 'turned back on, lines are voiced again');
 
 select pg_temp.act_as_admin();
 select * from finish();
