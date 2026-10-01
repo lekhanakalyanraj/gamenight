@@ -16,7 +16,7 @@ test("the catalogue reads real games as catalog_svc", async (t) => {
     t.skip("local Supabase database not running");
     return;
   }
-  assert.deepEqual(all.map((g) => g.slug).sort(), ["heads-up", "mafia", "quiz-night", "undercover"]);
-  const fourPlayers = await games.list({ players: 4 });
-  assert.ok(!fourPlayers.some((g) => g.slug === "mafia"), "Mafia needs at least 5 players");
+  assert.deepEqual(all.map((g) => g.slug).sort(), ["heads-up", "quiz-night", "undercover"]);
+  const short = await games.list({ players: 4, minutes: 20 });
+  assert.ok(!short.some((g) => g.slug === "quiz-night"), "Quiz Night takes 25 minutes");
 });

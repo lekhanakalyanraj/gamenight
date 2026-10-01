@@ -61,7 +61,7 @@ grant catalog_svc, voice_svc to postgres;
 set local role catalog_svc;
 create temp table catalog_rows on commit drop as select count(*)::int as n from catalog.games;
 reset role;
-select is((select n from catalog_rows), 4, 'the catalog service reads the catalogue');
+select is((select n from catalog_rows), 3, 'the catalog service reads the catalogue (Undercover, Quiz Night, Heads Up)');
 
 select throws_ok($$ set local role catalog_svc; insert into catalog.games values ('x', 'X', 3, 3, 1, 'x') $$,
                  '42501', null, 'the catalogue is read-only for the catalog service');

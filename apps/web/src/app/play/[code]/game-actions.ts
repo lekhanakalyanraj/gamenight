@@ -1,6 +1,6 @@
 "use server";
 
-import type { GameAction } from "@gamenight/db-types";
+import type { GameAction, QuizAnswer } from "@gamenight/db-types";
 
 import { friendlyError } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/server";
@@ -12,14 +12,69 @@ import { isUuid } from "@/lib/validate";
 const BAD = { error: "Something went wrong. Please try again." };
 const REGIONS = new Set(["IN", "GB", "US"]);
 
-export async function startGame(roomId: string, theme: string | null, region: string | null): Promise<{ error?: string }> {
+export type GameSetup =
+  | { kind: "undercover"; theme: string | null; region: string | null }
+  | { kind: "quiz"; rounds: number; seconds: number; region: string | null };
+
+export async function startGame(roomId: string, setup: GameSetup): Promise<{ error?: string }> {
   if (!isUuid(roomId)) return BAD;
-  const settings: Record<string, string> = {};
-  const cleanTheme = theme?.trim().slice(0, 30);
-  if (cleanTheme) settings.theme = cleanTheme;
-  if (region && REGIONS.has(region)) settings.region = region;
+  const settings: Record<string, string | number> = {};
+  if (setup.region && REGIONS.has(setup.region)) settings.region = setup.region;
+  if (setup.kind === "undercover") {
+    const cleanTheme = setup.theme?.trim().slice(0, 30);
+    if (cleanTheme) settings.theme = cleanTheme;
+  } else if (setup.kind === "quiz") {
+    if (![3, 4, 5].includes(setup.rounds) || ![10, 20, 30].includes(setup.seconds)) return BAD;
+    settings.rounds = setup.rounds;
+    settings.seconds = setup.seconds;
+  } else {
+    return BAD;
+  }
   const supabase = await createClient();
-  const { error } = await supabase.rpc("start_game", { p_room_id: roomId, p_kind: "undercover", p_settings: settings });
+  const { error } = await supabase.rpc("start_game", { p_room_id: roomId, p_kind: setup.kind, p_settings: settings });
+  return error ? { error: friendlyError(error) } : {};
+}
+
+/**
+ * A quiz answer: an option ({option}), true or false ({value: boolean}) or an estimate ({value: number}). The
+ * server stamps the time; the phone makes the answer id, so a retried tap counts once.
+ */
+export async function answerQuestion(
+  gameId: string,
+  answer: { option: number } | { value: boolean | number },
+  actionId: string,
+): Promise<{ answer?: QuizAnswer; error?: string }> {
+  if (!isUuid(gameId) || !isUuid(actionId)) return BAD;
+  let clean: { option: number } | { value: boolean | number };
+  if ("option" in answer) {
+    if (!Number.isInteger(answer.option) || answer.option < 0 || answer.option > 3) return BAD;
+    clean = { option: answer.option };
+  } else if (typeof answer.value === "boolean" || (typeof answer.value === "number" && Number.isFinite(answer.value))) {
+    clean = { value: answer.value };
+  } else {
+    return { error: "Type a number first." };
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("answer_question", {
+    p_game_id: gameId, p_answer: clean, p_action_id: actionId,
+  });
+  return error ? { error: friendlyError(error) } : { answer: data ?? undefined };
+}
+
+/** The last-placed player doubles this question's points (going into the final round, before answering). */
+export async function playJoker(gameId: string): Promise<{ error?: string }> {
+  if (!isUuid(gameId)) return BAD;
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("play_joker", { p_game_id: gameId });
+  return error ? { error: friendlyError(error) } : {};
+}
+
+/** Your topic for Quiz Night, picked in the lobby (the database checks its length and characters). */
+export async function setTopic(roomId: string, topic: string | null): Promise<{ error?: string }> {
+  if (!isUuid(roomId) || (topic !== null && typeof topic !== "string")) return BAD;
+  const clean = topic?.trim().replace(/\s+/g, " ").slice(0, 30) || null;
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_topic", { p_room_id: roomId, p_topic: clean ?? "" }); // "" clears it
   return error ? { error: friendlyError(error) } : {};
 }
 

@@ -55,6 +55,7 @@ export function PlayerTile({ member, online, size = "phone", isMe = false, child
         </span>
         <span className={`text-muted ${big ? "text-base" : "text-xs"}`}>
           {member.role === "host" ? "Host" : online ? "Here" : "Phone disconnected"}
+          {member.topic ? <span data-testid="player-topic"> · quiz topic: {member.topic}</span> : null}
         </span>
       </span>
       {children}

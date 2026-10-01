@@ -17,6 +17,10 @@ const TvGame = dynamic(() => import("@/components/game/tv-game"), {
   ssr: false,
   loading: () => <p className="p-10 text-center text-3xl text-muted">Loading the game…</p>,
 });
+const TvQuiz = dynamic(() => import("@/components/game/quiz-tv"), {
+  ssr: false,
+  loading: () => <p className="p-10 text-center text-3xl text-muted">Loading the quiz…</p>,
+});
 
 /** How long the TV shows a finished game's reveal before going back to the lobby and its QR code. */
 const REVEAL_SECONDS = 60;
@@ -49,7 +53,8 @@ export function TvLobby({ lobby, userId, joinUrl, qr }: {
   const narrator = <Narrator lines={live.hostLines} clips={live.clips} voiceOn={live.room.voice} />;
   const game = live.game;
   if (game && (game.game.phase !== "ended" || Date.parse(game.game.ended_at ?? "") > now - REVEAL_SECONDS * 1000)) {
-    return <>{narrator}<TvGame live={{ ...live, game }} /></>;
+    const Screen = game.game.kind === "quiz" ? TvQuiz : TvGame;
+    return <>{narrator}<Screen live={{ ...live, game }} /></>;
   }
 
   const players = activeMembers(live.members);

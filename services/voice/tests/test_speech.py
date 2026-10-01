@@ -78,4 +78,4 @@ def test_the_fake_voice_is_free_and_uncapped_and_voices_can_be_swapped(env):
     settings = from_env()
     assert settings.monthly_characters is None
     assert settings.voice_for("undercover") == "custom"
-    assert settings.voice_for("mafia") == settings.voice_for("host")  # a game without its own voice yet
+    assert settings.voice_for("heads_up") == settings.voice_for("host")  # a game without its own voice yet

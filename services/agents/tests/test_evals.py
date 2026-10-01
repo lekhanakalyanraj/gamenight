@@ -32,8 +32,8 @@ def test_concurrent_cases_never_see_each_others_room():
 
 
 def test_the_catalog_fixture_filters_like_the_real_catalog():
-    games = asyncio.run(harness._list_games(players=4, minutes=30))
-    assert {g["slug"] for g in games} == {"heads-up", "quiz-night", "undercover"}  # Mafia: 5+ players, 40 min
+    games = asyncio.run(harness._list_games(players=4, minutes=20))
+    assert {g["slug"] for g in games} == {"heads-up", "undercover"}  # Quiz Night takes 25 minutes
 
 
 def test_the_eval_game_refuses_the_moves_the_database_would(monkeypatch):

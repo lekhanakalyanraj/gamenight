@@ -13,6 +13,7 @@ import { activeMembers, latestHostLine, type LobbyDisplay, type LobbyMember } fr
 import type { FormState } from "@/lib/validate";
 
 import { kickMember, leaveRoom, pairDisplay, removeDisplay } from "./actions";
+import { setTopic } from "./game-actions";
 import { HostChat } from "./host-chat";
 
 // The game screens animate with Motion, which sets inline styles; rendered only in the browser, those go
@@ -20,6 +21,10 @@ import { HostChat } from "./host-chat";
 const PhoneGame = dynamic(() => import("@/components/game/phone-game"), {
   ssr: false,
   loading: () => <p className="p-10 text-center text-muted">Loading the game…</p>,
+});
+const PhoneQuiz = dynamic(() => import("@/components/game/quiz-phone"), {
+  ssr: false,
+  loading: () => <p className="p-10 text-center text-muted">Loading the quiz…</p>,
 });
 
 /** An ended game stays on screen until you leave its reveal, or for 10 minutes after a reload. */
@@ -57,7 +62,8 @@ export function PhoneLobby({ lobby, meId, isHost }: { lobby: Lobby; meId: string
   const showGame = game && (game.game.phase !== "ended"
     || (leftReveal !== game.game.id && Date.parse(game.game.ended_at ?? "") > now - REVEAL_MINUTES * 60_000));
   if (game && showGame) {
-    return <PhoneGame live={{ ...live, game }} meId={meId} isHost={isHost} onBackToLobby={() => setLeftReveal(game.game.id)} />;
+    const Screen = game.game.kind === "quiz" ? PhoneQuiz : PhoneGame;
+    return <Screen live={{ ...live, game }} meId={meId} isHost={isHost} onBackToLobby={() => setLeftReveal(game.game.id)} />;
   }
 
   const players = activeMembers(live.members);
@@ -97,7 +103,9 @@ export function PhoneLobby({ lobby, meId, isHost }: { lobby: Lobby; meId: string
         </ul>
       </Card>
 
-      {isHost ? <StartGame roomId={live.room.id} players={players.length} /> : null}
+      <TopicPicker roomId={live.room.id} topic={me?.topic ?? null} />
+
+      {isHost ? <StartGame roomId={live.room.id} players={players.length} topics={players.filter((m) => m.topic).length} /> : null}
 
       <p className="text-center text-sm text-muted">
         {isHost ? null : "Waiting for the host to start."}
@@ -212,6 +220,45 @@ function LeaveRoom({ roomId, isHost }: { roomId: string; isHost: boolean }) {
         </Button>
         <Button variant="secondary" className="flex-1" onClick={() => setConfirming(false)}>Cancel</Button>
       </div>
+      <Notice>{error}</Notice>
+    </Card>
+  );
+}
+
+const TOPICS = ["Cricket", "Bollywood", "Food", "Music", "Science", "Geography"];
+
+/** Your topic for Quiz Night: some questions will be about it, and credited to you on the TV. */
+function TopicPicker({ roomId, topic }: { roomId: string; topic: string | null }) {
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string>();
+  const [pending, startTransition] = useTransition();
+  const pick = (value: string | null) => startTransition(async () => {
+    const result = await setTopic(roomId, value);
+    setError(result.error);
+    if (!result.error) setText("");
+  });
+
+  return (
+    <Card>
+      <h2 className="mb-1 text-lg font-medium">Your Quiz Night topic</h2>
+      <p className="mb-3 text-sm text-muted">
+        {topic ? <>You picked <span data-testid="my-topic" className="text-foreground">{topic}</span>. Some questions will be about it.</> : "Pick something you know: some questions will be about it."}
+      </p>
+      <div role="group" aria-label="Quiz topics" className="mb-3 flex flex-wrap gap-2">
+        {TOPICS.map((t) => (
+          <button key={t} type="button" aria-pressed={topic?.toLowerCase() === t.toLowerCase()} disabled={pending}
+                  onClick={() => pick(t)}
+                  className={`h-9 rounded-full border px-3 text-sm transition ${topic?.toLowerCase() === t.toLowerCase() ? "border-accent bg-accent text-accent-ink" : "border-border bg-surface-2"}`}>
+            {t}
+          </button>
+        ))}
+      </div>
+      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (text.trim()) pick(text); }}>
+        <input aria-label="Your own topic" value={text} maxLength={30} onChange={(e) => setText(e.target.value)}
+               placeholder="Or type your own" autoComplete="off"
+               className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 outline-none focus:border-accent" />
+        <Button type="submit" variant="secondary" disabled={pending || !text.trim()}>Pick</Button>
+      </form>
       <Notice>{error}</Notice>
     </Card>
   );
