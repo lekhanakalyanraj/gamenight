@@ -3,6 +3,9 @@
 # Build from this directory: docker build services/agents
 
 FROM langchain/langgraph-api:3.12@sha256:6edd1cd4fab2b3ed9c3725ca6f237d55afdf55747026c3602cebd41d09d3173c
+# Debian's security updates, so a fix published after the base image was built still ships (the image scan
+# fails on any fixable high or critical vulnerability; upstream rebuilds can take days).
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /deps/agents
 COPY . .
