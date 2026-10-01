@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 VOICES = {
     "host": "EXAVITQu4vr4xnSDxMaL",  # Sarah: warm and bright, for the lobby
     "undercover": "JBFqnCBsd6RMkjVDRZzb",  # George: a storyteller's voice, for the sly detective
+    "quiz": "IKne3meq5aSn9XLyUdCD",  # Charlie: quick and upbeat, for the quiz-show host
 }
 
 

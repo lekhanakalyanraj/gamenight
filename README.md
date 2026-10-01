@@ -23,7 +23,7 @@ A multiplayer party-game platform: a **TV** hosts the room, players join from th
 | 3 | Undercover end to end: the game engine in Postgres, the AI game master, phones and TV, leak gates | **done** |
 | 4 | The narrator's voice: every line the TV shows is spoken (ElevenLabs), with captions | **done** |
 | 4b | Kubernetes: every service in kind under the restricted profile, network policies proven enforced, CI deploys and plays there | **done** |
-| 5 | Quiz Night: grounded questions with sources, answers on phones, speed scoring, picture rounds | **in progress** (5a: the quiz engine) |
+| 5 | Quiz Night: grounded questions with sources, answers on phones, speed scoring, picture rounds | **in progress** (5a: the quiz engine; 5b: the AI quiz master and grounded questions) |
 | 6–7 | Mafia, Heads Up | |
 | 8 | Eval suite, dashboards, load test | |
 
@@ -115,7 +115,7 @@ Undercover is the first game. The database runs the rules, and an AI game master
 
   That's about 2.4 s at p50 and 4 s at p95 from `narrate` to audio, the target, and most of it is the safety check, not the voice. `make voice-latency` repeats the real-voice timing (about 1,000 characters).
 
-**Quiz Night** is the second game (slice 5; the AI quiz master and the screens are still to come). Everyone answers the same question on their phone at once, and the TV reveals the answer and the leaderboard.
+**Quiz Night** is the second game (slice 5; the phone and TV screens are still to come). Everyone answers the same question on their phone at once, and the TV reveals the answer and the leaderboard.
 - **The host picks the length:** 3 to 5 rounds of 5 questions, 10 to 30 seconds a question. Each round is a different kind: multiple choice, true or false, a picture round, and closest estimate.
 - **Every question has a source:**
   - Questions come from a verified bank, each with its answer, a source URL, and the sentence from that source that backs it.
@@ -130,6 +130,11 @@ Undercover is the first game. The database runs the rules, and an AI game master
   - Estimates are ranked by how close they came.
   - Going into the final round, whoever is last gets a double-points joker.
 - **Topics:** players pick a topic in the lobby, and the quiz leans toward the topics of whoever is furthest behind.
+- **The bank grows itself, grounded:** when a player picks a topic the bank is short of, the room's agent writes new questions in the background, before the game starts. A question is kept only if it passes three checks; anything that fails is dropped, never fixed up.
+  1. The model writes each one from English Wikipedia (web search limited to it), with its answer, the article and the sentence that states the answer.
+  2. Code fetches the article itself (never a URL the model hands over) and finds the sentence. The article's own sentence becomes the stored quote, so an invented or paraphrased one can't get through. It also checks the shape: distinct options, the answer among them, not given away by the question.
+  3. A judge sees only the question, the keyed answer and that sentence, and must confirm the sentence states the answer, exactly one option is right, the question can be read only one way, won't go out of date, and suits the room's rating.
+- **The AI quiz master is never told a live answer.** It picks questions (steering toward trailing players' topics), asks, reveals and hosts, but its briefing and its question search leave answers out until the reveal. It may still know an answer from its own training (the capital of Australia), so the narrator also refuses a line that names the right option without the others, rules out every other option, or says an estimate's number. The database refuses the first and last of those too.
 
 **The game simulator** (`evals/simulator`) plays whole games with bots, through the same RPCs and Realtime topics as phones. The game master is either a scripted referee (`make simulate`), or the whole pipeline: dispatcher, Agent Server, game master and narrator (`make simulate GM=agents`). With `GAMENIGHT_MODEL=fake` the pipeline's game master plays scripted rules, some of them deliberately leaky, for free.
 - **In every game, the bots probe for leaks:** they try to read each other's cards, listen on each other's private topics, and scan everything the TV received for a word or a role.
@@ -186,7 +191,7 @@ Every PR runs the checks below; they also run daily on main, so newly disclosed 
 | Images | hadolint, Grype | Non-root, pinned base images; no fixable high or critical vulnerabilities (exceptions need a reason) |
 | Kubernetes | helm lint, kubeconform, kube-linter; the network-policy test in kind | Valid manifests; restricted pods (non-root, read-only, no capabilities); default-deny network policies that really block every link a service shouldn't have |
 | Headers and CSP | Playwright, OWASP ZAP (nightly) | Per-request CSP nonces, no violations, clickjacking and sniffing protection |
-| AI behaviour | Golden evals, leak attacks on the game master, narration checks, real-model games (gates); promptfoo red team (OWASP LLM + Agentic) | Prompt injection, secret and prompt leaks, tool misuse, off-rating content, staying in role |
+| AI behaviour | Golden evals, leak attacks on the game master and the quiz master, quiz accuracy, narration checks, real-model games (gates); promptfoo red team (OWASP LLM + Agentic) | Prompt injection, secret and prompt leaks, tool misuse, off-rating content, staying in role |
 | CI itself | zizmor, actionlint, OpenSSF Scorecard | Actions pinned by SHA, least-privilege tokens, no script injection |
 
 ## Observability
@@ -314,7 +319,11 @@ These fixes are covered by the tier-0 tests and the PR's eval gates. The 10 game
 cd services/agents && uv run python -m evals.run_golden --gate        # needs ANTHROPIC_API_KEY
 cd services/agents && uv run python -m evals.run_leak_attacks --gate
 cd services/agents && uv run python -m evals.run_narration
+cd services/agents && uv run python -m evals.run_quiz_leak_attacks --gate
+cd services/agents && uv run python -m evals.run_quiz_accuracy --gate --generate cricket   # --code-only: free
 ```
+
+**Quiz accuracy** runs the question verifier on 41 hand-checked candidates: 22 real questions with their real Wikipedia sentences, and 19 broken copies of them. The broken ones have a wrong option keyed, true and false flipped, a wrong year, an invented quote, a real sentence from the wrong article, two right options, an ambiguous or dated question, a sentence that doesn't state the answer, or a question telling the judge to pass it. Each is tagged with the layer that must drop it, code or judge. The gate: no broken question is kept, and at least 80% of the good ones are, so a verifier that drops everything fails too. `--generate` also writes fresh questions for a topic and reports what was kept, flagging any kept question whose sentence doesn't literally contain its answer.
 
 ## Layout
 

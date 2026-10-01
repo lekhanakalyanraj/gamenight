@@ -73,8 +73,9 @@ def game_master_model() -> BaseChatModel:
     return _anthropic(GAME_MASTER_MODEL, max_tokens=700, temperature=0.4)
 
 
-def content_model() -> BaseChatModel:
-    return _anthropic(GAME_MASTER_MODEL, max_tokens=600, temperature=0.9)
+def content_model(max_tokens: int = 600) -> BaseChatModel:
+    """Word pairs need a few hundred tokens; a topic's quiz questions, each with its source sentence, need more."""
+    return _anthropic(GAME_MASTER_MODEL, max_tokens=max_tokens, temperature=0.9)
 
 
 def reviewer_model() -> BaseChatModel:

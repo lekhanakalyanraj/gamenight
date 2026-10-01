@@ -9,17 +9,21 @@ The agents write to the game only through agents_api (see gamenight_agents.db).
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import merge_configs
 from langgraph.graph import END, START, MessagesState, StateGraph
 
-from gamenight_agents import db
+from gamenight_agents import db, quiz_content
 from gamenight_agents.host import host_agent
 from gamenight_agents.lobby import joined_names, welcome_line
 from gamenight_agents.models import host_model
+from gamenight_agents.settings import model_provider
 from gamenight_agents.telemetry import GenAITracer, run_span
+
+log = logging.getLogger("gamenight.agents.lobby")
 
 
 class RoomState(MessagesState):
@@ -46,7 +50,27 @@ async def lobby(state: RoomState, config: RunnableConfig) -> dict:
                 line = await welcome_line(host_model(), names, rating, callbacks=[GenAITracer()])
                 # The batch's first event id makes the line idempotent: a retried run can't post it twice.
                 await db.host_say(room_id, line, "welcome", event_id=events[0]["id"])
+        # Players picking quiz topics: top up the question bank for them now, so the quiz never waits at the start.
+        topics = picked_topics(events)
+        if room_id and topics and model_provider() != "fake":
+            snapshot = await db.room_snapshot(room_id) or {}
+            if snapshot.get("status") == "lobby":
+                for topic in topics:
+                    result = await quiz_content.top_up(room_id, topic, snapshot.get("age_rating", "family"),
+                                                       callbacks=[GenAITracer()])
+                    log.info("quiz bank for %r: %s", topic, result)
     return {"events": None, "kind": None}
+
+
+def picked_topics(events: list[dict[str, Any]], at_most: int = 3) -> list[str]:
+    """The distinct topics picked in this batch (as the bank files them), a few at a time."""
+    seen: list[str] = []
+    for event in events:
+        topic = quiz_content.topic_key((event.get("payload") or {}).get("topic")) \
+            if event.get("kind") == "topic_picked" else None
+        if topic and topic not in seen:
+            seen.append(topic)
+    return seen[:at_most]
 
 
 async def host_chat(state: RoomState, config: RunnableConfig) -> dict:

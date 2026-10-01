@@ -9,6 +9,7 @@ players furthest behind, falling back to any topic; the database does the timing
 from typing import Any
 
 from gamenight_agents import games, narrator
+from gamenight_agents.quiz_content import topic_key
 from gamenight_agents.turn import Turn
 
 MOVES_PER_TURN = 3
@@ -61,8 +62,8 @@ async def pick(turn: Turn, s: dict[str, Any]) -> tuple[dict[str, Any], str | Non
     round_index = min(s["asked"] // config["per_round"], len(config["round_kinds"]) - 1)
     kind = config["round_kinds"][round_index]
     for player in sorted(s["players"], key=lambda p: (p["points"], turn.rng.random())):
-        if player.get("topic"):
-            found = await games.quiz_bank(turn.game_id, topic=player["topic"].lower(), kind=kind, limit=5)
+        if topic := topic_key(player.get("topic")):
+            found = await games.quiz_bank(turn.game_id, topic=topic, kind=kind, limit=5)
             if found:
                 return turn.rng.choice(found), player["member_id"]
     for any_kind in (kind, None):  # no player's topic has one: any topic, then any kind
