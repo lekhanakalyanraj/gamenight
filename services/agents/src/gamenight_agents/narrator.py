@@ -26,6 +26,8 @@ STOCK = {
     "discussion": "Talk it out. Someone here isn't who they seem.",
     "vote": "The votes are in. Let's see who the room suspects.",
     "guess": "Mr. White, this is your moment.",
+    "question": "Phones ready. The clock is ticking!",
+    "reveal": "The answer's in. Let's see who got it!",
     "ended": "And that's the game! What a night.",
 }
 
@@ -105,6 +107,8 @@ async def narrate(turn: Turn, line: str) -> dict:
         except games.Refused as refused:
             if refused.code == "P0002":  # the room has closed (everyone went home): nothing to say
                 return {"shown": False, "reason": "the room is closed"}
+            if refused.code == "PT429":  # the room has heard 20 lines this minute: this one goes unsaid
+                return {"shown": False, "reason": "the room has heard enough for a minute; say nothing now"}
             if refused.code != "GN001":
                 raise
             reasons = ["the database found a secret word in it"]

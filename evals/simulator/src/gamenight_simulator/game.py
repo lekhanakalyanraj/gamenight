@@ -17,6 +17,7 @@ import httpx
 
 from gamenight_simulator.agents import Agents
 from gamenight_simulator.leaks import broadcast_leaks, narration_leaks, private_topic_leaks, public_leaks, record
+from gamenight_simulator.quiz import check_quiz, play_quiz
 from gamenight_simulator.realtime import Realtime
 from gamenight_simulator.referee import Referee
 from gamenight_simulator.supabase import RpcError, Session, Supabase
@@ -73,10 +74,11 @@ class GameReport:
 class Game:
     def __init__(self, sb: Supabase, referee: Referee, host: Player, table: list[Player], tv: Player,
                  rng: random.Random, report: GameReport, staller: Player | None, agents: Agents | None = None,
-                 voice: bool = False):
+                 voice: bool = False, kind: str = "undercover"):
         self.sb, self.referee, self.host, self.table, self.tv = sb, referee, host, table, tv
         self.agents = agents  # None: the scripted referee plays the game master here; else the real pipeline does
         self.voice = voice  # the voice service is running: every line the room is shown must get its clip
+        self.kind = kind  # undercover or quiz
         self.gm_since: float | None = None
         self.seen_since: dict[tuple, float] = {}
         self.rng, self.report, self.staller = rng, report, staller
@@ -264,8 +266,8 @@ class Game:
         started = time.monotonic()
         while time.monotonic() - started < DELIVERY_TIMEOUT:
             missing = [] if received(self.tv, room_topic, "games", phase="ended") else [self.tv_summary(room_topic)]
-            missing += [f"{p.name}: their card" for p in self.table
-                        if not received(p, f"member:{p.member_id}", "secrets")]
+            missing += [f"{p.name}: their card" for p in self.table if self.kind == "undercover"
+                        and not received(p, f"member:{p.member_id}", "secrets")]
             if not missing:
                 await asyncio.sleep(0.5)  # other screens' sockets may be a moment behind
                 return []
@@ -326,6 +328,77 @@ class Game:
     async def play_in(self, room: dict[str, Any]) -> None:
         report, sb = self.report, self.sb
         started = time.monotonic()
+        probes: asyncio.Task | None = None
+        if self.kind == "quiz":
+            probes = asyncio.create_task(self.probe_topics())
+            g, seen = await play_quiz(self, room)
+        else:
+            g, seen, probes = await self.play_undercover(room)
+
+        room_topic = f"room:{room['id']}"
+        if self.agents is not None and not await self.agents.wait_idle(self.game_id):
+            report.errors.append("the game master was still busy 30 s after the game ended")
+        # Local Realtime restarts its database stream every 10 minutes ("rebalancing"), and broadcasts sent
+        # during the gap are lost. A game that spans one can't be fully scanned, so it's inconclusive. (A game
+        # that never ended has no end to deliver: that's its error above, not Realtime's.)
+        lost = await self.undelivered(room_topic) if g["phase"] == "ended" else []
+        steps = {row.get("step") for table, row in map(record, self.tv.realtime.broadcasts.get(room_topic, []))
+                 if table == "games"}
+        if skipped := sorted(set(range(0, g.get("step", 0) + 1)) - steps):
+            lost.append(f"the TV missed steps {skipped[:5]}")
+        lost += [i for p in [self.tv, *self.table] for i in p.realtime.interruptions]
+        if lost:
+            report.inconclusive = f"Realtime lost messages: {', '.join(lost[:3])}" + (
+                f" and {len(lost) - 3} more" if len(lost) > 3 else "")
+        if self.kind == "quiz":
+            await check_quiz(self, room, g)
+            report.rounds = g.get("config", {}).get("rounds", 0)
+        else:
+            self.check_undercover(room, g, seen)
+            if self.truth:
+                report.leaks += await self.narration_scan(room["id"], g, self.words())
+            report.winner, report.rounds = g.get("winner"), g.get("round", 0)
+            report.mix = {k: g["config"].get(k) for k in ("civilians", "undercovers", "mr_whites")}
+            for player in self.table:
+                moves = await sb.select(player.session, "game_actions", game_id=self.game_id)
+                if any(m["member_id"] != player.member_id for m in moves):
+                    report.leaks.append(f"{player.name} could read someone else's moves")
+        report.lines_seen, report.clip_seconds = await self.voiced(room_topic)
+        if self.voice and len(report.clip_seconds) < report.lines_seen:
+            report.errors.append(f"{report.lines_seen - len(report.clip_seconds)} of {report.lines_seen} lines "
+                                 "never got a clip")
+        if self.agents is not None:
+            report.gm = await self.agents.game_stats(self.game_id)
+        if probes is not None:
+            report.leaks += await probes
+            for player in [*self.table, self.tv]:
+                for topic, received in player.realtime.broadcasts.items():
+                    if topic.startswith("member:") and topic != f"member:{player.member_id}" and received:
+                        report.leaks.append(f"{player.name} received broadcasts on {topic}")
+
+        report.seconds = round(time.monotonic() - started, 1)
+        report.completed = g["phase"] == "ended" and not report.errors and not report.inconclusive
+
+        # Tidy up: stop listening (play closes the room; a host may keep only 3 rooms open).
+        for player in [*self.table, self.tv]:
+            for topic in list(player.realtime.broadcasts):
+                await player.realtime.leave(topic)
+            player.realtime.broadcasts.clear()
+
+    def words(self) -> list[str]:
+        return [self.truth["words"]["civilian"], self.truth["words"]["undercover"]] if self.truth else []
+
+    def check_undercover(self, room: dict[str, Any], g: dict[str, Any], seen: list) -> None:
+        room_topic = f"room:{room['id']}"
+        self.report.leaks += broadcast_leaks(self.tv.realtime.broadcasts.get(room_topic, []), self.words())
+        self.report.leaks += public_leaks(seen, self.words())
+        for player in self.table:
+            self.report.leaks += private_topic_leaks(
+                player.realtime.broadcasts.get(f"member:{player.member_id}", []), player.member_id)
+
+    async def play_undercover(self, room: dict[str, Any]) -> tuple[dict[str, Any], list, asyncio.Task | None]:
+        report, sb = self.report, self.sb
+        started = time.monotonic()
         game = await sb.rpc(self.host.session, "start_game", p_room_id=room["id"], p_kind="undercover",
                             p_settings=report.settings)
         self.game_id = game["id"]
@@ -356,69 +429,29 @@ class Game:
                 await asyncio.sleep(0.2)
         else:
             report.errors.append(f"didn't finish within {timeout:.0f} s (phase {g['phase']})")
-
-        room_topic = f"room:{room['id']}"
-        if self.agents is not None and not await self.agents.wait_idle(self.game_id):
-            report.errors.append("the game master was still busy 30 s after the game ended")
-        # Local Realtime restarts its database stream every 10 minutes ("rebalancing"), and broadcasts sent
-        # during the gap are lost. A game that spans one can't be fully scanned, so it's inconclusive. (A game
-        # that never ended has no end to deliver: that's its error above, not Realtime's.)
-        lost = await self.undelivered(room_topic) if g["phase"] == "ended" else []
-        steps = {row.get("step") for table, row in map(record, self.tv.realtime.broadcasts.get(room_topic, []))
-                 if table == "games"}
-        if skipped := sorted(set(range(0, g.get("step", 0) + 1)) - steps):
-            lost.append(f"the TV missed steps {skipped[:5]}")
-        lost += [i for p in [self.tv, *self.table] for i in p.realtime.interruptions]
-        if lost:
-            report.inconclusive = f"Realtime lost messages: {', '.join(lost[:3])}" + (
-                f" and {len(lost) - 3} more" if len(lost) > 3 else "")
-        words = [self.truth["words"]["civilian"], self.truth["words"]["undercover"]] if self.truth else []
-        report.leaks += broadcast_leaks(self.tv.realtime.broadcasts.get(room_topic, []), words)
-        report.leaks += public_leaks(seen, words)
-        for player in self.table:
-            report.leaks += private_topic_leaks(player.realtime.broadcasts.get(f"member:{player.member_id}", []),
-                                                player.member_id)
-            moves = await sb.select(player.session, "game_actions", game_id=self.game_id)
-            if any(m["member_id"] != player.member_id for m in moves):
-                report.leaks.append(f"{player.name} could read someone else's moves")
-        if self.truth:
-            report.leaks += await self.narration_scan(room["id"], g, words)
-        report.lines_seen, report.clip_seconds = await self.voiced(room_topic)
-        if self.voice and len(report.clip_seconds) < report.lines_seen:
-            report.errors.append(f"{report.lines_seen - len(report.clip_seconds)} of {report.lines_seen} lines "
-                                 "never got a clip")
-        if self.agents is not None:
-            report.gm = await self.agents.game_stats(self.game_id)
-        if probes is not None:
-            report.leaks += await probes
-            for player in [*self.table, self.tv]:
-                for topic, received in player.realtime.broadcasts.items():
-                    if topic.startswith("member:") and topic != f"member:{player.member_id}" and received:
-                        report.leaks.append(f"{player.name} received broadcasts on {topic}")
-
-        report.winner, report.rounds = g.get("winner"), g.get("round", 0)
-        report.mix = {k: g["config"].get(k) for k in ("civilians", "undercovers", "mr_whites")}
-        report.seconds = round(time.monotonic() - started, 1)
-        report.completed = g["phase"] == "ended" and not report.errors and not report.inconclusive
-
-        # Tidy up: stop listening (play closes the room; a host may keep only 3 rooms open).
-        for player in [*self.table, self.tv]:
-            for topic in list(player.realtime.broadcasts):
-                await player.realtime.leave(topic)
-            player.realtime.broadcasts.clear()
+        return g, seen, probes
 
 
 async def play_game(sb: Supabase, referee: Referee, host: Player, bots: list[Player], tv: Player,
                     rng: random.Random, number: int, min_players: int, max_players: int,
-                    stall_rate: float, agents: Agents | None = None, voice: bool = False) -> GameReport:
+                    stall_rate: float, agents: Agents | None = None, voice: bool = False,
+                    kind: str = "undercover") -> GameReport:
     table = [host, *rng.sample(bots, rng.randint(min_players, max_players) - 1)]
-    staller = rng.choice(table[1:]) if rng.random() < stall_rate else None
-    settings = {k: v for k, v in {"theme": rng.choice(THEMES), "region": rng.choice(REGIONS)}.items() if v}
-    report = GameReport(number, len(table), rng.choice(POLICIES), staller is not None, settings)
+    if kind == "quiz":  # a quiz has no stalling speaker; a player sitting a question out runs its timer instead
+        staller = None
+        settings = {k: v for k, v in {"rounds": rng.choice([3, 4]), "seconds": rng.choice([10, 20]),
+                                      "region": rng.choice(REGIONS)}.items() if v}
+        report = GameReport(number, len(table), "quiz", False, settings)
+    else:
+        staller = rng.choice(table[1:]) if rng.random() < stall_rate else None
+        settings = {k: v for k, v in {"theme": rng.choice(THEMES), "region": rng.choice(REGIONS)}.items() if v}
+        report = GameReport(number, len(table), rng.choice(POLICIES), staller is not None, settings)
     referee.turn_seconds = 10 if staller else 20
     # A hang anywhere (a socket, the database) fails this game, not the whole run.
     limit = 120.0 + 10.0 * len(table) + 60.0 * STALLS_PER_GAME * report.staller + DELIVERY_TIMEOUT
     limit += 45.0 * len(table) if agents else 0
+    if kind == "quiz":  # the game's own clock (play_quiz) is the one that should trip; this only catches a hang
+        limit = 900.0 + (1200.0 if agents else 0)
     try:
         async with contextlib.AsyncExitStack() as stack:
             async def connect(player: Player) -> Player:
@@ -427,7 +460,7 @@ async def play_game(sb: Supabase, referee: Referee, host: Player, bots: list[Pla
 
             screens = [await connect(p) for p in table]  # table[0] is the host
             stalling = screens[table.index(staller)] if staller else None
-            game = Game(sb, referee, screens[0], screens, await connect(tv), rng, report, stalling, agents, voice)
+            game = Game(sb, referee, screens[0], screens, await connect(tv), rng, report, stalling, agents, voice, kind)
             await asyncio.wait_for(game.play(), limit)
     except TimeoutError:
         report.errors.append(f"the game hung: no result within {limit:.0f} s")

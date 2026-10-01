@@ -36,7 +36,7 @@ select set_eq(
   array['create_room', 'join_room', 'leave_room', 'kick_member',
         'start_display_pairing', 'pair_display', 'remove_display',
         'start_game', 'submit_action', 'pause_game', 'resume_game', 'extend_phase', 'skip_turn', 'skip_phase',
-        'settle_judgement', 'end_game', 'set_voice'],
+        'settle_judgement', 'end_game', 'set_voice', 'set_topic', 'answer_question', 'play_joker'],
   'the only SECURITY DEFINER functions signed-in users can call through the API are the room and game RPCs'
 );
 
@@ -52,7 +52,9 @@ select ok(
   has_function_privilege('authenticated', 'private.is_room_member(uuid)', 'execute')
   and has_function_privilege('authenticated', 'private.can_view_room(uuid)', 'execute')
   and has_function_privilege('authenticated', 'private.can_access_topic(text)', 'execute')
-  and has_function_privilege('authenticated', 'private.can_hear_clip(text)', 'execute'),
+  and has_function_privilege('authenticated', 'private.can_hear_clip(text)', 'execute')
+  and has_function_privilege('authenticated', 'private.quiz_revealed(uuid, smallint)', 'execute')
+  and has_function_privilege('authenticated', 'private.can_see_quiz_image(text)', 'execute'),
   'signed-in users can still evaluate the RLS helpers that policies depend on'
 );
 

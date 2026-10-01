@@ -79,7 +79,7 @@ async def run(args: argparse.Namespace) -> int:
                 if player.session.expires_at - time.time() < 600:
                     player.session = await sb.refresh(player.session)
             report = await play_game(sb, referee, host, bots, tv, rng, number, args.min_players, args.max_players,
-                                     args.stall_rate, agents, args.voice)
+                                     args.stall_rate, agents, args.voice, args.game)
             reports.append(report)
             status = "skip" if report.inconclusive and not report.leaks and not report.errors else (
                 "ok  " if report.completed and not report.leaks else "FAIL")
@@ -146,6 +146,7 @@ def main() -> None:
     parser.add_argument("--max-players", type=int, default=10)
     parser.add_argument("--stall-rate", type=float, default=0.1, help="share of games with a player who stalls")
     parser.add_argument("--report", help="write a JSON report here")
+    parser.add_argument("--game", choices=["undercover", "quiz"], default="undercover", help="which game the bots play")
     parser.add_argument("--voice", action="store_true",
                         help="the voice service is running: fail a game when a line it showed never got its clip")
     parser.add_argument("--game-master", choices=["referee", "agents"], default="referee",

@@ -1,7 +1,8 @@
 """The game master graph: one thread per game (thread id = game id), readable by services only.
 
 The dispatcher relays a game's events here. Each run reads the game in code first; if every event is stale
-(the game has moved past its step), it stops without a model call. Otherwise the AI game master acts
+(the game has moved past its step), it stops without a model call. A quiz is run by the scripted quiz master
+(gamenight_agents.quiz_rules). For Undercover, the AI game master acts
 (gamenight_agents.game_master), or the scripted rules do (GAMENIGHT_MODEL=fake, or once the game has used its
 model budget). Host chat never runs here, and nothing here streams to a phone.
 """
@@ -15,7 +16,7 @@ from typing import Annotated, Any, TypedDict
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 
-from gamenight_agents import game_master, game_rules, games
+from gamenight_agents import game_master, game_rules, games, quiz_rules
 from gamenight_agents.settings import model_provider
 from gamenight_agents.telemetry import GenAITracer, run_span
 from gamenight_agents.turn import Turn, current
@@ -47,13 +48,16 @@ async def run_game_master(state: GameState, config: RunnableConfig) -> dict:
     game_id = state["game_id"]
     events = state.get("events") or []
     with run_span("agents.game_master", config, room_id=state.get("room_id"), game_id=game_id, events=len(events)):
-        live = live_events(events, (await games.state(game_id))["game"]["step"])
+        game = (await games.state(game_id))["game"]
+        live = live_events(events, game["step"])
         if not live:
             return {"events": None, "runs": 1, "stale_runs": 1}
         turn = Turn(game_id, live[-1]["id"], live, random.Random(live[-1]["id"]), callbacks=[GenAITracer()])
         token = current.set(turn)
         try:
-            if model_provider() == "fake" or state.get("model_calls", 0) >= GAME_MODEL_BUDGET:
+            if game["kind"] == "quiz":
+                await quiz_rules.play(turn)  # scripted for now; the AI quiz master is slice 5b
+            elif model_provider() == "fake" or state.get("model_calls", 0) >= GAME_MODEL_BUDGET:
                 await game_rules.play(turn)
             else:
                 await game_master.play(turn, config)

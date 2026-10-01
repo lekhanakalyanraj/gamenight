@@ -21,8 +21,10 @@ A multiplayer party-game platform: a **TV** hosts the room, players join from th
 | 1 | Live rooms without AI: TV pairs by code, join by QR, live lobby with presence, host removes players; every service as a signed, scanned image | **done** |
 | 2 | Dispatcher, supervisor, host chat, evals and red team, OpenTelemetry from tap to model call | **done** |
 | 3 | Undercover end to end: the game engine in Postgres, the AI game master, phones and TV, leak gates | **done** |
-| 4 | The narrator's voice: every line the TV shows is spoken (ElevenLabs), with captions | **in progress** (4.1: the voice pipeline; 4.2: playback on the TV) |
-| 5–7 | Quiz Night, Mafia, Heads Up | |
+| 4 | The narrator's voice: every line the TV shows is spoken (ElevenLabs), with captions | **done** |
+| 4b | Kubernetes: every service in kind under the restricted profile, network policies proven enforced, CI deploys and plays there | **done** |
+| 5 | Quiz Night: grounded questions with sources, answers on phones, speed scoring, picture rounds | **in progress** (5a: the quiz engine) |
+| 6–7 | Mafia, Heads Up | |
 | 8 | Eval suite, dashboards, load test | |
 
 ## Services
@@ -113,6 +115,22 @@ Undercover is the first game. The database runs the rules, and an AI game master
 
   That's about 2.4 s at p50 and 4 s at p95 from `narrate` to audio, the target, and most of it is the safety check, not the voice. `make voice-latency` repeats the real-voice timing (about 1,000 characters).
 
+**Quiz Night** is the second game (slice 5; the AI quiz master and the screens are still to come). Everyone answers the same question on their phone at once, and the TV reveals the answer and the leaderboard.
+- **The host picks the length:** 3 to 5 rounds of 5 questions, 10 to 30 seconds a question. Each round is a different kind: multiple choice, true or false, a picture round, and closest estimate.
+- **Every question has a source:**
+  - Questions come from a verified bank, each with its answer, a source URL, and the sentence from that source that backs it.
+  - The seed questions were checked by fetching each source and reading the sentence, not written from memory.
+  - Picture rounds use public-domain Wikimedia Commons images, credited, and stored under names made from a hash of the image, so a file name never gives the answer away.
+- **The answer is the secret, until its reveal:**
+  - A question's keyed answer sits in a table no player can read. The public question row gets it only at the reveal.
+  - A player reads only their own answer until then, and a picture only once its question is asked in their room.
+  - The host's lines can't single out the live answer: the database refuses a line naming the right option without the others, or saying an estimate's number.
+- **The database keeps score:**
+  - A right answer scores 500 to 1,000 points, more the faster it came, by the server's clock.
+  - Estimates are ranked by how close they came.
+  - Going into the final round, whoever is last gets a double-points joker.
+- **Topics:** players pick a topic in the lobby, and the quiz leans toward the topics of whoever is furthest behind.
+
 **The game simulator** (`evals/simulator`) plays whole games with bots, through the same RPCs and Realtime topics as phones. The game master is either a scripted referee (`make simulate`), or the whole pipeline: dispatcher, Agent Server, game master and narrator (`make simulate GM=agents`). With `GAMENIGHT_MODEL=fake` the pipeline's game master plays scripted rules, some of them deliberately leaky, for free.
 - **In every game, the bots probe for leaks:** they try to read each other's cards, listen on each other's private topics, and scan everything the TV received for a word or a role.
 - **They also try illegal moves,** which the database must refuse, and replay game-master events, which must apply once.
@@ -146,6 +164,7 @@ make images       # build every service image; make scan-<service> runs Grype on
 make simulate     # 20 simulated games of Undercover on the local stack; fails on any leak (GAMES=50 for more)
 make simulate GM=agents   # the same, with the real pipeline as game master (run agents-dev and dispatcher-dev first)
 make simulate GM=agents VOICE=1   # ...and every line must get its clip (run voice-dev too; a free tone by default)
+make simulate GAME=quiz   # whole quizzes: no answer seen before its reveal, every score recomputed and matched
 make dast         # OWASP ZAP baseline against a running web app (DAST_TARGET=...)
 make hooks        # install pre-commit hooks (gitleaks, ruff)
 npm run test:e2e -w @gamenight/web   # Playwright: a TV and five phones through a lobby and a whole game (needs Supabase running)

@@ -29,6 +29,8 @@ jobs:
       - run: npm ci
       - name: Start Supabase (only the services the tests need; Storage holds the narration audio)
         run: npx supabase start -x studio,imgproxy,mailpit,postgres-meta,edge-runtime,logflare,vector,supavisor
+      - name: Load the seed files into Storage (Quiz Night's picture rounds)
+        run: npx supabase seed buckets
       - run: npx supabase test db
       - name: Security advisors (splinter)
         run: make db-advisors
@@ -42,6 +44,8 @@ jobs:
       - run: make simulator-test
       - name: Game simulator (20 games, scripted game master; fails on any leak or unfinished game)
         run: make simulate GAMES=20
+      - name: Quiz Night simulator (10 quizzes; fails on any answer leak, wrong score or unfinished quiz)
+        run: make simulate GAMES=10 GAME=quiz
       # The same bots against the real pipeline: dispatcher, Agent Server, the game master graph, the
       # narrator's checks, and the voice service. GAMENIGHT_MODEL=fake plays scripted rules in place of the
       # model and GAMENIGHT_VOICE=fake speaks a tone, so it's free; every line shown must get its clip.
@@ -56,6 +60,7 @@ jobs:
             sleep 2
           done
           make simulate GAMES=10 GM=agents VOICE=1
+          make simulate GAMES=5 GM=agents GAME=quiz VOICE=1
       - name: Agent Server, dispatcher and voice logs
         if: failure()
         run: tail -n 80 agents-dev.log dispatcher-dev.log voice-dev.log || true  # absent if an earlier step failed

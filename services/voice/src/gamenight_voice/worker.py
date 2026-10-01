@@ -33,6 +33,13 @@ LEASE_SECONDS = 30
 SPEECH_TIMEOUT = 8.0
 CONCURRENCY = 4  # a turn often says two lines at once
 KEEP_UNUSED = "24 hours"
+LINE_TIMEOUT = 30.0  # a line that takes longer is given up on: its lease runs out, and it's retried or goes stale
+STUCK_AFTER = 60.0  # health fails if the worker loop hasn't come round in this long, so the service is restarted
+
+# Every connection gives up rather than hang: a database that drops connections (a restart, an I/O stall) must
+# never leave the worker waiting on a dead socket. Keepalives notice a socket that died silently.
+DB_OPTIONS = {"autocommit": True, "connect_timeout": 5, "keepalives": 1, "keepalives_idle": 10,
+              "keepalives_interval": 5, "keepalives_count": 3, "options": "-c statement_timeout=15000"}
 
 CLAIM = """
 with due as (
@@ -106,9 +113,14 @@ class Worker:
         self.settings, self.storage, self.speak = settings, storage, speak
         self.budget_left: int | None = settings.monthly_characters
         self.outcomes: dict[str, int] = {}
+        self.last_loop = time.monotonic()  # when the worker loop last came round
+
+    def stuck(self) -> bool:
+        return time.monotonic() - self.last_loop > STUCK_AFTER
 
     def health(self) -> dict[str, Any]:
-        return {"voice": self.settings.provider, "budget_left": self.budget_left, "lines": dict(self.outcomes)}
+        return {"voice": self.settings.provider, "budget_left": self.budget_left, "lines": dict(self.outcomes),
+                "worker": "stuck" if self.stuck() else "ok"}
 
     async def voice_due(self) -> int:
         """Voices everything that's due. Returns how many lines it handled."""
@@ -117,10 +129,14 @@ class Worker:
 
         async def bounded(line: Line) -> None:
             async with semaphore:
-                await self.voice(line)
+                try:
+                    await asyncio.wait_for(self.voice(line), LINE_TIMEOUT)
+                except TimeoutError:  # its lease runs out: retried, or closed as stale
+                    log.warning("line %s: gave up after %.0f s", line.line_id, LINE_TIMEOUT)
+                    self.outcomes["timed_out"] = self.outcomes.get("timed_out", 0) + 1
 
         while True:
-            async with await psycopg.AsyncConnection.connect(self.settings.database_url, autocommit=True) as conn:
+            async with await psycopg.AsyncConnection.connect(self.settings.database_url, **DB_OPTIONS) as conn:
                 rows = await (await conn.execute(CLAIM, (CONCURRENCY * 2, LEASE_SECONDS))).fetchall()
             if not rows:
                 return handled
@@ -146,7 +162,7 @@ class Worker:
             return outcome
 
     async def _voice(self, line: Line) -> str:
-        async with await psycopg.AsyncConnection.connect(self.settings.database_url, autocommit=True) as conn:
+        async with await psycopg.AsyncConnection.connect(self.settings.database_url, **DB_OPTIONS) as conn:
             if line.age > FRESH_SECONDS:
                 return await self._finish(conn, line, "stale")
             voice_id = self.settings.voice_for(line.persona)
@@ -202,7 +218,7 @@ class Worker:
 
     async def sweep(self) -> int:
         """Deletes clips nobody has used for a day, and finished requests older than a week."""
-        async with await psycopg.AsyncConnection.connect(self.settings.database_url, autocommit=True) as conn:
+        async with await psycopg.AsyncConnection.connect(self.settings.database_url, **DB_OPTIONS) as conn:
             unused = await (await conn.execute(UNUSED, (KEEP_UNUSED,))).fetchall()
             await self.storage.delete([path for _, path in unused])  # the files first: never a row without its file
             if unused:
@@ -216,11 +232,12 @@ class Worker:
             await self.storage.sign_in()
         while not stop.is_set():
             try:
-                connect = psycopg.AsyncConnection.connect(self.settings.database_url, autocommit=True)
+                connect = psycopg.AsyncConnection.connect(self.settings.database_url, **DB_OPTIONS)
                 async with await connect as listener:
                     await listener.execute("listen narration_requests")
                     log.info("listening for lines to voice (%s)", self.settings.provider)
                     while not stop.is_set():
+                        self.last_loop = time.monotonic()
                         if count := await self.voice_due():
                             log.info("handled %d lines", count)
                         if time.monotonic() - swept > sweep_every:
