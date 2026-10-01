@@ -4,8 +4,9 @@ name: evals
 # $10/month limit), never given to pull requests from forks.
 #   tier 1: pull requests that change the agents, the game or the simulator; 3 real-model games
 #   tier 2: Mondays, if main has changed since the last run; 10 real-model games
-# Deterministic checks gate: the golden evals' hard checks, the leak attacks on the game master, narration's
-# hard checks, and 0 leaks in real-model games. Model-graded scores (judges, the host-chat red team) report.
+# Deterministic checks gate: the golden evals' hard checks, the leak attacks on the game master and the quiz
+# master, quiz accuracy (no broken question kept), narration's hard checks, and 0 leaks in real-model games.
+# Model-graded scores (judges, the host-chat red team) and freshly generated quiz questions report.
 # The job always reports a result (skipped when nothing relevant changed), so it can be a required check.
 
 on:
@@ -112,6 +113,14 @@ jobs:
         working-directory: services/agents
         run: uv run python -m evals.run_leak_attacks --gate --out leak-results.json
 
+      - name: Leak attacks on the quiz master (gate)
+        working-directory: services/agents
+        run: uv run python -m evals.run_quiz_leak_attacks --gate --out quiz-leak-results.json
+
+      - name: "Quiz accuracy (gate: no broken question kept; fresh questions report)"
+        working-directory: services/agents
+        run: uv run python -m evals.run_quiz_accuracy --gate --generate cricket "indian food" --out quiz-accuracy-results.json
+
       - name: Narration (hard checks gate; the judge's score reports)
         working-directory: services/agents
         run: uv run python -m evals.run_narration --gate --out narration-results.json
@@ -152,6 +161,8 @@ jobs:
           path: |
             services/agents/golden-results.json
             services/agents/leak-results.json
+            services/agents/quiz-leak-results.json
+            services/agents/quiz-accuracy-results.json
             services/agents/narration-results.json
             services/agents/evals/redteam/redteam-results.json
             games.log

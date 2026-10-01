@@ -99,8 +99,10 @@ async def narrate(turn: Turn, line: str) -> dict:
         return {"shown": False, "reason": f"at most {LINES_PER_TURN} lines per turn; say nothing more now"}
     state = await games.state(turn.game_id)  # fresh: this turn may have just revealed a role
     line = " ".join(line.split())[:MAX_LINE]
-    reasons = (leakcheck.leaks(line, state, turn.picked) or claims_the_end(line, state)
-               or await review(line, state, turn))
+    live_question = (await games.quiz_state(turn.game_id)).get("question") if state["game"].get("kind") == "quiz" \
+        else None
+    reasons = (leakcheck.leaks(line, state, turn.picked) or leakcheck.quiz_answer_leaks(line, live_question)
+               or claims_the_end(line, state) or await review(line, state, turn))
     if not reasons:
         try:
             shown = await games.say(turn.game_id, line, turn.key("say"))

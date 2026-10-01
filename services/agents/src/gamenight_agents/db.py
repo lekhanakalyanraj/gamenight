@@ -39,3 +39,23 @@ async def is_room_host(room_id: str, user_id: str) -> bool:
         cur = await conn.execute("select agents_api.is_room_host(%s, %s)", (room_id, user_id))
         row = await cur.fetchone()
     return bool(row and row[0])
+
+
+async def quiz_coverage(room_id: str, topic: str) -> dict[str, int]:
+    """How many usable quiz questions a topic has for this room, by kind (counts only)."""
+    async with await psycopg.AsyncConnection.connect(database_url(), autocommit=True) as conn:
+        row = await (await conn.execute("select agents_api.quiz_coverage(%s, %s)", (room_id, topic))).fetchone()
+    return row[0] or {}
+
+
+async def save_quiz_question(q: dict[str, Any]) -> str | None:
+    """Saves one verified question to the bank; None when it's already there."""
+    async with await psycopg.AsyncConnection.connect(database_url(), autocommit=True) as conn:
+        row = await (await conn.execute(
+            "select agents_api.save_quiz_question(%s, %s, %s::smallint, %s::public.age_rating, %s, %s::jsonb, "
+            "%s::jsonb, %s, %s, %s)",
+            (q["topic"], q["kind"], q["difficulty"], q["rating"], q["prompt"],
+             json.dumps(q["options"]) if q.get("options") is not None else None, json.dumps(q["answer"]),
+             q.get("unit"), q["source_url"], q["source_quote"]),
+        )).fetchone()
+    return str(row[0]) if row and row[0] else None

@@ -301,3 +301,46 @@ def test_a_turn_that_leaves_the_game_waiting_on_the_game_master_is_asked_once_mo
     turn = play_turn(monkeypatch, agent, {"phase": "discussion", "phase_deadline": None})  # still waiting after
     assert len(agent.runs) == 2 and turn.stalls_caught == 1  # asked once, never in a loop
     assert 'open_phase("vote", seconds)' in agent.runs[1][-1].content
+
+
+# ---- Quiz Night: the live answer ------------------------------------------------------------------------------------
+
+LIVE = {"kind": "choice", "options": ["Sydney", "Melbourne", "Canberra", "Perth"], "key": {"option": 2},
+        "revealed_at": None}
+
+
+@pytest.mark.parametrize(("line", "leaks"), [
+    ("It's CANBERRA, obviously!", True),                              # the right option on its own
+    ("Sydney, Melbourne, Canberra or Perth? Phones out!", False),      # every option read out
+    ("My money's on Sydney.", False),                                 # a wrong one isn't the answer
+    ("Question 2 of 15, for Asha!", False),
+    ("Not Sydney, not Melbourne, not Perth. Think!", True),           # every other option ruled out
+    ("Sydney or Melbourne? Tricky one.", False),                      # some ruled out isn't all
+])
+def test_a_line_may_not_single_out_the_live_answer(line, leaks):
+    assert bool(leakcheck.quiz_answer_leaks(line, LIVE)) is leaks
+
+
+def test_once_revealed_the_answer_may_be_said_and_reasons_never_name_it():
+    assert leakcheck.quiz_answer_leaks("It was Canberra!", {**LIVE, "revealed_at": "2026-10-01T10:00:20Z"}) == []
+    reasons = leakcheck.quiz_answer_leaks("Canberra!", LIVE)
+    assert reasons and not any("canberra" in r.lower() for r in reasons)  # the quiz master isn't told the answer
+    estimate = {"kind": "estimate", "key": {"value": 8848.86}, "revealed_at": None}
+    assert leakcheck.quiz_answer_leaks("Is it 8848.86 metres?", estimate)
+    moon = {"kind": "estimate", "key": {"value": 1969}, "revealed_at": None}
+    assert leakcheck.quiz_answer_leaks("Somewhere around 1,969?", moon)
+    assert not leakcheck.quiz_answer_leaks("Question 19 of 69.", moon)
+    assert not leakcheck.quiz_answer_leaks("19690", moon)
+
+
+def test_the_quiz_masters_briefing_never_carries_a_live_answer():
+    from gamenight_agents import quiz_master
+
+    state = {"game": {"phase": "question", "step": 4, "round": 1, "phase_deadline": "2099-01-01", "paused": False,
+                      "resolved": False, "config": {"rounds": 3, "per_round": 5, "seconds": 20, "round_kinds": []}},
+             "asked": 2, "total": 15, "age_rating": "family", "players": [],
+             "question": {**LIVE, "number": 2, "prompt": "Capital of Australia?", "answer": None}}
+    text = quiz_master.briefing([], state)
+    assert '"key"' not in text and '"option": 2' not in text
+    revealed = {**state, "question": {**state["question"], "revealed_at": "now", "answer": {"option": 2}}}
+    assert '"answer": {"option": 2}' in quiz_master.briefing([], revealed)  # public once revealed
