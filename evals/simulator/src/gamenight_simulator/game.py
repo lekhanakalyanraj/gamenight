@@ -412,9 +412,11 @@ class Game:
             timeout += 45.0 * len(self.table)
         while time.monotonic() - started < timeout:
             acted = await self.referee.act(self.game_id) if self.agents is None else False
+            # Players first, then the game: if the game row still says it's on, it was on when the players were read,
+            # so a role shown here is a real leak, not the end-of-game reveal landing between the two reads.
+            players = await sb.select(self.tv.session, "game_players", game_id=self.game_id)
             g = (await sb.select(self.tv.session, "games", id=self.game_id))[0]
             self.time_game_master(g)
-            players = await sb.select(self.tv.session, "game_players", game_id=self.game_id)
             seen += [("games", g), *(("game_players", p) for p in players)]
             if g["phase"] == "ended":
                 break

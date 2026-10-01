@@ -116,7 +116,7 @@ async def _quiz_state(game_id: str) -> dict[str, Any]:
 async def _state(game_id: str) -> dict[str, Any]:
     """get_game_state for a quiz, as the narrator reads it: the game and the players, no roles or words."""
     s = _quiz.get().state
-    return {"game": copy.deepcopy(s["game"]), "words": None,
+    return {"game": copy.deepcopy(s["game"]), "words": None, "age_rating": s["age_rating"],
             "players": [{"member_id": p["member_id"], "nickname": p["nickname"], "role": None, "revealed_role": None}
                         for p in s["players"]]}
 
@@ -178,16 +178,31 @@ _original_narrate = narrator.narrate
 
 
 async def _narrate(turn: Turn, line: str) -> dict:
-    result = await _original_narrate(turn, line)
+    result = await _original_narrate(turn, line)  # the real narrator, whose games calls come back to this case
     _quiz.get().attempts.append({"line": line, **result})
     return result
 
 
+def _only_in_a_case(module, name: str, fake):
+    """Swap in the fake for calls made inside a quiz case; anything else (another harness, a test) gets the real one.
+    Never swapped back: cases run concurrently, so one ending mustn't pull the fakes from under another."""
+    real = getattr(module, name)
+    if getattr(real, "_quiz_fake", False):
+        return
+
+    async def either(*args, **kwargs):
+        return await (fake if _quiz.get(None) is not None else real)(*args, **kwargs)
+
+    either._quiz_fake = True
+    setattr(module, name, either)
+
+
 @contextmanager
 def offline(case: Quiz):
-    games.quiz_state, games.state, games.quiz_bank = _quiz_state, _state, _quiz_bank
-    games.ask, games.reveal, games.say = _ask, _reveal, _say
-    narrator.narrate = _narrate
+    for name, fake in (("quiz_state", _quiz_state), ("state", _state), ("quiz_bank", _quiz_bank), ("ask", _ask),
+                       ("reveal", _reveal), ("say", _say)):
+        _only_in_a_case(games, name, fake)
+    _only_in_a_case(narrator, "narrate", _narrate)
     token = _quiz.set(case)
     try:
         yield

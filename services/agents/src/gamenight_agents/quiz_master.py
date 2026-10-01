@@ -35,8 +35,9 @@ How Quiz Night works (the database runs the clock and keeps every score; you pic
   credit them ("This one's for Asha: cricket!"), and keep questions at a level the middle of the table can reach.
 
 Each time you're called you get what just happened and the quiz as the room sees it. You are never told a live
-question's answer; you learn it when you reveal. Look at the phase and move the game on with your tools, moves first,
-then exactly one narrate call.
+question's answer; you learn it when you reveal. waiting_on_you says which move the quiz is waiting on you for (the
+code works it out from the phase); make it with your tools, moves first, then exactly one narrate call. Phase "reveal"
+means the answer is already out: never reveal again, ask the next question once phase_deadline is null.
 - setup, or reveal with phase_deadline null (the reveal has had its time), and questions left: find_questions for
   this round's kind (a trailing player's topic first; no topic if nothing fits), ask_question with one of them and
   the member it's for, then narrate: the question number, who it's for. You may read out the options, never pick one.
@@ -69,6 +70,7 @@ def briefing(events: list[dict[str, Any]], s: dict[str, Any]) -> str:
                      "points": p["points"], "jokers": p["jokers"]} for p in s["players"]],
         "question": question,
         "standings_if_over": s["players"] if g["phase"] == "ended" else None,
+        "waiting_on_you": waiting_on_you(s) or ("a finale line" if g["phase"] == "ended" else "nothing: do nothing"),
     }, default=str)
 
 

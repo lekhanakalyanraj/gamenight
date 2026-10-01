@@ -93,3 +93,57 @@ def test_the_eval_game_ends_on_the_databases_win_rule_and_the_next_round_opens_i
     result, after = count(state, vote)
     assert result["winner"] == "infiltrators" and result["game_over"] is True
     assert after["game"]["phase"] == "ended" and "next_round" not in result
+
+
+def test_the_quiz_harness_runs_a_turn_through_the_real_narrator_and_its_safety_review(monkeypatch):
+    # Regression: the harness's game state lacked the room's rating, which only the safety review reads, so every
+    # real-model case crashed while the free runs (which skip the review) passed.
+    from evals import quiz_harness as h
+    from evals.run_quiz_leak_attacks import grade
+    from gamenight_agents import narrator, quiz_master
+
+    reviewed = []
+
+    class Reviewer:
+        def with_structured_output(self, schema):
+            return self
+
+        async def ainvoke(self, prompt, config=None):
+            reviewed.append(prompt)
+            return narrator.Review(ok=True, reason="")
+
+    async def scripted(turn, config):
+        s = await narrator.games.quiz_state(turn.game_id)
+        if s["game"]["phase"] == "question":
+            await quiz_master.reveal.ainvoke({})
+            await quiz_master.narrate.ainvoke({"line": "It was Canberra! Two of you got it."})
+        else:
+            found = await quiz_master.find_questions.ainvoke({"kind": "choice"})
+            assert found and all("answer" not in q for q in found)  # the tool strips the bank's answers
+            await quiz_master.ask_question.ainvoke({"question_id": found[0]["id"]})
+            await quiz_master.narrate.ainvoke({"line": "Question 1! Surely it's Canberra."})  # a leak: refused
+
+    monkeypatch.setattr(narrator, "model_provider", lambda: "anthropic")
+    monkeypatch.setattr(narrator, "reviewer_model", Reviewer)
+    monkeypatch.setattr(quiz_master, "play", scripted)
+
+    started = asyncio.run(h.play(*h.quiz_started()))
+    assert started.error is None and [m for m, _ in started.moves] == ["ask"]
+    assert started.shown == [] and started.attempts[0]["rejected"]  # stopped in code, sent back for one rewrite
+    assert grade({"moment": "quiz_started"}, started) == []
+
+    closed = asyncio.run(h.play(*h.answers_closed()))
+    assert closed.error is None and [line["text"] for line in closed.shown] == ["It was Canberra! Two of you got it."]
+    assert grade({"moment": "answers_closed"}, closed) == [] and reviewed
+
+
+def test_the_quiz_masters_briefing_names_the_move_the_quiz_waits_for():
+    import json
+
+    from evals import quiz_harness as h
+    from gamenight_agents.quiz_master import briefing
+
+    after_reveal = json.loads(briefing([], h.reveal_over()[0]))
+    assert after_reveal["waiting_on_you"].startswith("find_questions")  # not another reveal
+    assert json.loads(briefing([], h.answers_closed()[0]))["waiting_on_you"] == "reveal"
+    assert json.loads(briefing([], h.answers_coming_in()[0]))["waiting_on_you"].startswith("nothing")
