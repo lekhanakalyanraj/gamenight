@@ -275,6 +275,7 @@ dependencies = [
     { name = "opentelemetry-sdk" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pyjwt", extra = ["crypto"] },
+    { name = "urllib3" },
 ]
 
 [package.dev-dependencies]
@@ -295,6 +296,7 @@ requires-dist = [
     { name = "opentelemetry-sdk", specifier = ">=1.30" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.14" },
+    { name = "urllib3", specifier = ">=2.8" },
 ]
 
 [package.metadata.requires-dev]

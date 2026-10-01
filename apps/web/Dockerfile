@@ -15,6 +15,9 @@ COPY apps/web apps/web
 RUN npm run build --workspace @gamenight/web
 
 FROM node:22-trixie-slim@sha256:b26b04c123d9ff8ab646ceb18b9d75a1173acf64b9a401094b906d27b29338d4
+# Debian's security updates, so a fix published after the base image was built still ships (the image scan
+# fails on any fixable high or critical vulnerability; upstream rebuilds can take days).
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3100 HOSTNAME=0.0.0.0
 WORKDIR /app
 COPY --from=build --chown=1000:1000 /repo/apps/web/.next/standalone ./
