@@ -6,12 +6,13 @@ an ambiguous or dated question, a sentence that doesn't say the answer, a questi
 Each broken one is tagged with the layer that must drop it: the code (source, quote and shape checks) or the judge.
 
 Gate (--gate): no broken question is kept (a wrongly keyed question reaching a game is the failure that matters),
-and at least 80% of the good ones are kept (so a verifier that drops everything fails too).
+at least 80% of the good ones are kept (so a verifier that drops everything fails too), and with --generate, at
+least one fresh question is kept (once, a cut-off reply left the generator writing nothing, and only a report said).
 
 --code-only runs the code layer alone, with a judge that passes everything: free, no model key, and the judge's
 cases are skipped. It still fetches the articles from Wikipedia.
 --generate TOPIC ... also generates fresh questions for those topics and reports what was kept and why the rest
-were dropped (report-only: what the generator writes changes run to run).
+were dropped (what the generator writes changes run to run, so only "none kept at all" gates).
 
 Usage: uv run python -m evals.run_quiz_accuracy [--code-only] [--only ID ...] [--gate] [--generate TOPIC ...]
        [--out quiz-accuracy-results.json]
@@ -77,9 +78,13 @@ def answer_in_sentence(q: dict[str, Any]) -> bool:
 async def fresh(http: httpx.AsyncClient, topic: str) -> dict[str, Any]:
     need = {k: 2 for k in quiz_content.KINDS}
     try:
-        candidates = await quiz_content.generate(topic, RATING, need)
+        reply = await quiz_content.write(topic, RATING, need)
     except Exception as error:  # report-only: say what went wrong, don't stop the run
         return {"topic": topic, "candidates": 0, "kept": [], "dropped": [], "error": repr(error)}
+    candidates = quiz_content.parse_candidates(quiz_content._text(reply))
+    if not candidates:
+        return {"topic": topic, "candidates": 0, "kept": [], "dropped": [],
+                "error": "no usable candidates: " + quiz_content.why_empty(reply)}
     kept, dropped = [], []
     for c in candidates:
         try:
@@ -125,11 +130,13 @@ def summary(results: list[dict[str, Any]], generated: list[dict[str, Any]], gate
     return "\n".join(lines) + "\n"
 
 
-def gate_failures(results: list[dict[str, Any]]) -> list[str]:
+def gate_failures(results: list[dict[str, Any]], generated: list[dict[str, Any]]) -> list[str]:
     good = [r for r in results if r["expect"] == "keep"]
     failures = [f"{r['id']}: {'; '.join(r['failed'])}" for r in results if r["failed"]]
     if good and sum(bool(r["kept"]) for r in good) / len(good) < KEEP_RATE:
         failures.append(f"kept fewer than {KEEP_RATE:.0%} of the good questions")
+    if generated and not any(g["kept"] for g in generated):  # which ones are kept varies; none at all is broken
+        failures.append("the generator's fresh questions: none kept for any topic")
     return failures
 
 
@@ -164,7 +171,7 @@ async def main() -> int:
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as handle:
             handle.write(report)
-    failures = gate_failures(results)
+    failures = gate_failures(results, generated)
     for failure in failures:
         print(f"FAIL {failure}", file=sys.stderr)
     return 1 if args.gate and failures else 0

@@ -14,6 +14,7 @@ Only questions that pass all three are saved to the bank. Anything that fails is
 
 import difflib
 import json
+import logging
 import math
 import re
 import urllib.parse
@@ -29,9 +30,11 @@ from gamenight_agents.models import content_model, reviewer_model
 KINDS = ("choice", "true_false", "estimate")
 TARGET_PER_KIND = 4  # a topic is "covered" with this many usable questions of each kind
 MAX_CANDIDATES = 9
+WRITE_TOKENS = 4000  # up to 9 questions, each with options and its source sentence, as JSON
 QUOTE_MATCH = 0.9  # how closely the quoted sentence must match the article's own
 SOURCE = re.compile(r"^https://en\.wikipedia\.org/wiki/([^\s?#]+)$")
 WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
+log = logging.getLogger("gamenight.agents.quiz_content")
 USER_AGENT = "gamenight-quiz/0.1 (https://github.com/lekhanakalyanraj/gamenight)"  # Wikimedia asks for a contact
 
 GENERATE = """Write quiz questions for a party game, on the topic below, for a room rated {rating}.
@@ -196,12 +199,27 @@ def wanted_text(need: dict[str, int]) -> str:
     return ", ".join(f"{n} {names[k]} question{'s' if n > 1 else ''}" for k, n in need.items() if n > 0)
 
 
-async def generate(topic: str, rating: str, need: dict[str, int], callbacks: list | None = None) -> list[Candidate]:
-    model = content_model().bind_tools([{"type": "web_search_20250305", "name": "web_search", "max_uses": 3,
-                                         "allowed_domains": ["en.wikipedia.org"]}])
+async def write(topic: str, rating: str, need: dict[str, int], callbacks: list | None = None) -> Any:
+    """The model's reply: candidate questions as a JSON list, after up to 3 searches."""
+    model = content_model(max_tokens=WRITE_TOKENS).bind_tools([
+        {"type": "web_search_20250305", "name": "web_search", "max_uses": 3, "allowed_domains": ["en.wikipedia.org"]}])
     prompt = GENERATE.format(topic=json.dumps(topic)[1:-1], rating=rating, wanted=wanted_text(need))
-    reply = await model.ainvoke(prompt, config={"callbacks": callbacks or []})
-    return parse_candidates(_text(reply))
+    return await model.ainvoke(prompt, config={"callbacks": callbacks or []})
+
+
+def why_empty(reply: Any) -> str:
+    """Why a reply gave no usable candidates, for the logs and the eval report."""
+    stop = (getattr(reply, "response_metadata", None) or {}).get("stop_reason")
+    text = _text(reply)
+    return f"stop_reason={stop}, {len(text)} characters of text, ending {text[-160:]!r}"
+
+
+async def generate(topic: str, rating: str, need: dict[str, int], callbacks: list | None = None) -> list[Candidate]:
+    reply = await write(topic, rating, need, callbacks)
+    candidates = parse_candidates(_text(reply))
+    if not candidates:
+        log.warning("no usable quiz questions for %r: %s", topic, why_empty(reply))
+    return candidates
 
 
 async def judge(c: Candidate, sentence: str, rating: str, callbacks: list | None = None) -> Verdict:

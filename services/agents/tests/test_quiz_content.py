@@ -90,3 +90,13 @@ def test_the_lobby_tops_up_a_few_distinct_topics_at_a_time():
     events = [{"kind": "topic_picked", "payload": {"topic": t}} for t in ("Cricket", "cricket", "Music", "Art", "Food")]
     events.append({"kind": "member_joined", "payload": {"nickname": "Asha"}})
     assert picked_topics(events) == ["cricket", "music", "art"]
+
+
+def test_a_reply_cut_off_mid_list_gives_nothing_and_says_why():
+    # Regression: 600 output tokens cut the list off, so every topic got no questions, silently.
+    from langchain_core.messages import AIMessage
+
+    reply = AIMessage('[{"kind": "choice", "prompt": "Who won the', response_metadata={"stop_reason": "max_tokens"})
+    assert qc.parse_candidates(qc._text(reply)) == []
+    assert "stop_reason=max_tokens" in qc.why_empty(reply)
+    assert qc.WRITE_TOKENS >= 9 * 250  # room for a full list of candidates with their sentences
