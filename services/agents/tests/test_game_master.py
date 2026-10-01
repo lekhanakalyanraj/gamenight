@@ -232,6 +232,17 @@ def test_a_host_can_never_open_a_games_thread(monkeypatch):
     assert asyncio.run(auth._room_host_only(service, {"thread_id": "game-1", "metadata": {"kind": "game"}}))
 
 
+def test_a_line_over_the_rooms_rate_limit_goes_unsaid_rather_than_ending_the_turn(shown, monkeypatch):
+    # Regression: the database's 20-lines-a-minute limit (PT429) was re-raised and crashed the game's run.
+    async def too_many(game, text, event):
+        raise games.Refused("PT429", "The host has said enough for now.")
+
+    monkeypatch.setattr(games, "say", too_many)
+    turn = Turn("g", EVENT, [], random.Random(1))
+    result = asyncio.run(narrator.narrate(turn, "Question 12 of 15!"))
+    assert result["shown"] is False and "enough" in result["reason"] and turn.lines_rejected == 0
+
+
 def test_nothing_is_said_once_the_room_has_closed(shown, monkeypatch):
     async def closed(game, text, event):
         raise games.Refused("P0002", "No open room.")

@@ -18,3 +18,6 @@ authenticated_security_definer_function_executable_public_skip_phase_p_game_id u
 authenticated_security_definer_function_executable_public_settle_judgement_p_game_id uuid, p_overrule boolean  # host control: only the host, only while a verdict on Mr. White's guess is waiting
 authenticated_security_definer_function_executable_public_end_game_p_game_id uuid  # host control: only the host of the game's room
 authenticated_security_definer_function_executable_public_set_voice_p_room_id uuid, p_on boolean  # room RPC: only the room's host turns the narrator's voice on or off
+authenticated_security_definer_function_executable_public_set_topic_p_room_id uuid, p_topic text  # room RPC: a player sets their own topic, only in the lobby of a room they're in
+authenticated_security_definer_function_executable_public_answer_question_p_game_id uuid, p_answer jsonb, p_action_id uuid  # game RPC: a player answers the open question once; the server stamps the time
+authenticated_security_definer_function_executable_public_play_joker_p_game_id uuid  # game RPC: the player holding the catch-up joker plays it, before answering

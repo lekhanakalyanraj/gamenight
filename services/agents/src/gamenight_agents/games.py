@@ -85,3 +85,28 @@ async def save_word_pair(theme: str, rating: str, region: str | None, word_a: st
 async def say(game: str, text: str, event: str) -> dict[str, Any]:
     return await _call("select row_to_json(l) from game_api.say(%(game)s::uuid, %(text)s, %(event)s::uuid) as l",
                        {"game": game, "text": text, "event": event})
+
+
+# ---- Quiz Night ---------------------------------------------------------------------------------------------------
+
+async def quiz_state(game: str) -> dict[str, Any]:
+    return await _call("select game_api.get_quiz_state(%(game)s::uuid)", {"game": game})
+
+
+async def quiz_bank(game: str, topic: str | None = None, kind: str | None = None, difficulty: int | None = None,
+                    limit: int = 20) -> list[dict[str, Any]]:
+    return await _call(
+        "select game_api.quiz_bank(%(game)s::uuid, %(topic)s, %(kind)s, %(difficulty)s::smallint, %(limit)s)",
+        {"game": game, "topic": topic, "kind": kind, "difficulty": difficulty, "limit": limit},
+    )
+
+
+async def ask(game: str, question: str, for_member: str | None, event: str) -> dict[str, Any]:
+    return await _call(
+        "select game_api.gm_ask(%(game)s::uuid, %(question)s::uuid, %(member)s::uuid, %(event)s::uuid)",
+        {"game": game, "question": question, "member": for_member, "event": event},
+    )
+
+
+async def reveal(game: str, event: str) -> dict[str, Any]:
+    return await _call("select game_api.gm_reveal(%(game)s::uuid, %(event)s::uuid)", {"game": game, "event": event})

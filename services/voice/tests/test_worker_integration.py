@@ -211,3 +211,23 @@ def test_clips_unused_for_a_day_are_deleted_file_first(room, provider):
     assert asyncio.run(w.sweep()) >= 1 and path in storage.deleted
     with psycopg.connect(ADMIN_URL) as conn:
         assert conn.execute("select count(*) from narration.cache where path = %s", (path,)).fetchone()[0] == 0
+
+
+def test_a_line_that_hangs_is_given_up_on_and_the_rest_are_still_voiced(room, provider, monkeypatch):
+    # Regression: when the database dropped its connections, the worker waited on a dead socket forever.
+    from gamenight_voice import worker as worker_module
+
+    monkeypatch.setattr(worker_module, "LINE_TIMEOUT", 0.5)
+
+    class HangsOnce(FakeVoice):
+        async def __call__(self, voice_id, text):
+            if "hangs" in text:
+                await asyncio.sleep(60)
+            return await super().__call__(voice_id, text)
+
+    voice = HangsOnce()
+    w, _ = worker(provider, voice)
+    stuck, fine = say(room, unique("This one hangs.")), say(room, unique("This one is fine."))
+    asyncio.run(w.voice_due())
+    assert request(fine)[0] == "voiced" and request(stuck)[0] is None  # its lease runs out: retried or stale
+    assert w.health()["lines"]["timed_out"] == 1

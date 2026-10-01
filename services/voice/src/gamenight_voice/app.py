@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 
 from gamenight_voice import speech
 from gamenight_voice.settings import Settings, from_env
@@ -60,6 +60,10 @@ app = FastAPI(title="gamenight voice", docs_url=None, redoc_url=None, openapi_ur
 
 
 @app.get("/healthz")
-def healthz() -> dict[str, Any]:
-    # Out of characters or not, the service is healthy: the room still has captions.
+def healthz(response: Response) -> dict[str, Any]:
+    # Out of characters or not, the service is healthy: the room still has captions. A worker loop that has
+    # stopped coming round isn't, so the probe fails and the service is restarted.
+    if worker and worker.stuck():
+        response.status_code = 503
+        return {"status": "stuck", "service": "voice", **worker.health()}
     return {"status": "ok", "service": "voice", **(worker.health() if worker else {})}

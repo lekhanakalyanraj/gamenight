@@ -157,10 +157,11 @@ trace-check:     ## after a join, confirm one trace spans web, dispatcher, agent
 
 GAMES ?= 20
 GM ?= referee
-simulate:        ## play GAMES simulated games (default 20); GM=agents plays the real game master (needs agents-dev, dispatcher-dev); VOICE=1 checks every line is voiced (needs voice-dev)
+GAME ?= undercover
+simulate:        ## play GAMES simulated games (default 20) of GAME (undercover or quiz); GM=agents plays the real game master (needs agents-dev, dispatcher-dev); VOICE=1 checks every line is voiced (needs voice-dev)
 	@key=$$(npx supabase status -o env | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$$/\1/p'); \
 	cd evals/simulator && SUPABASE_PUBLISHABLE_KEY=$$key AGENTS_SERVICE_TOKEN=$(AGENTS_SERVICE_TOKEN) \
-	  uv run python -m gamenight_simulator --games $(GAMES) --game-master $(GM) $(if $(VOICE),--voice)
+	  uv run python -m gamenight_simulator --games $(GAMES) --game $(GAME) --game-master $(GM) $(if $(VOICE),--voice)
 simulator-test:  ## lint and unit-test the game simulator
 	cd evals/simulator && uv run ruff check . && uv run pytest -q
 
