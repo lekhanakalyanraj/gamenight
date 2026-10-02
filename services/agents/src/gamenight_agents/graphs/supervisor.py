@@ -16,7 +16,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import merge_configs
 from langgraph.graph import END, START, MessagesState, StateGraph
 
-from gamenight_agents import db, quiz_content
+from gamenight_agents import db, headsup_content, quiz_content
 from gamenight_agents.host import host_agent
 from gamenight_agents.lobby import joined_names, welcome_line
 from gamenight_agents.models import host_model
@@ -59,6 +59,15 @@ async def lobby(state: RoomState, config: RunnableConfig) -> dict:
                     result = await quiz_content.top_up(room_id, topic, snapshot.get("age_rating", "family"),
                                                        callbacks=[GenAITracer()])
                     log.info("quiz bank for %r: %s", topic, result)
+        # Players picking Heads Up interests: build cards for them now, so the deck leans their way at the start.
+        interests = picked_interests(events)
+        if room_id and interests and model_provider() != "fake":
+            snapshot = await db.room_snapshot(room_id) or {}
+            if snapshot.get("status") == "lobby":
+                for interest in interests:
+                    result = await headsup_content.top_up(room_id, interest, snapshot.get("age_rating", "family"),
+                                                          callbacks=[GenAITracer()])
+                    log.info("Heads Up cards for %r: %s", interest, result)
     return {"events": None, "kind": None}
 
 
@@ -71,6 +80,19 @@ def picked_topics(events: list[dict[str, Any]], at_most: int = 3) -> list[str]:
         if topic and topic not in seen:
             seen.append(topic)
     return seen[:at_most]
+
+
+def picked_interests(events: list[dict[str, Any]], at_most: int = 3) -> list[str]:
+    """The distinct Heads Up interests picked in this batch (by the bank's key), a few at a time, latest first."""
+    seen: dict[str, str] = {}
+    for event in reversed(events):
+        if event.get("kind") != "interests_picked":
+            continue
+        for interest in (event.get("payload") or {}).get("interests") or []:
+            key = quiz_content.topic_key(interest)
+            if key and key not in seen:
+                seen[key] = interest
+    return list(seen.values())[:at_most]
 
 
 async def host_chat(state: RoomState, config: RunnableConfig) -> dict:

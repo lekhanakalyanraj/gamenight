@@ -59,3 +59,18 @@ async def save_quiz_question(q: dict[str, Any]) -> str | None:
              q.get("unit"), q["source_url"], q["source_quote"]),
         )).fetchone()
     return str(row[0]) if row and row[0] else None
+
+
+async def headsup_coverage(room_id: str, topic: str) -> int:
+    """How many usable Heads Up cards an interest has for this room (a count only)."""
+    async with await psycopg.AsyncConnection.connect(database_url(), autocommit=True) as conn:
+        row = await (await conn.execute("select agents_api.headsup_coverage(%s, %s)", (room_id, topic))).fetchone()
+    return int(row[0] or 0)
+
+
+async def save_headsup_card(topic: str, card: str, rating: str) -> str | None:
+    """Saves one reviewed card to the bank; None when it's already there."""
+    async with await psycopg.AsyncConnection.connect(database_url(), autocommit=True) as conn:
+        row = await (await conn.execute("select agents_api.save_headsup_card(%s, %s, %s::public.age_rating)",
+                                        (topic, card, rating))).fetchone()
+    return str(row[0]) if row and row[0] else None
