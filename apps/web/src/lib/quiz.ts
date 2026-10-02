@@ -76,7 +76,7 @@ export function answerText(q: QuizQuestion): string | null {
   if (!key) return null;
   if (key.option !== undefined) return optionsOf(q)[key.option] ?? null;
   if (typeof key.value === "boolean") return key.value ? "True" : "False";
-  if (typeof key.value === "number") return `${formatNumber(key.value)}${q.unit ? ` ${q.unit}` : ""}`;
+  if (typeof key.value === "number") return `${formatValue(key.value, q.unit)}${q.unit ? ` ${q.unit}` : ""}`;
   return null;
 }
 
@@ -84,12 +84,22 @@ export function answerText(q: QuizQuestion): string | null {
 export function pickText(q: QuizQuestion, answer: Key): string {
   if (answer.option !== undefined) return optionsOf(q)[answer.option] ?? "?";
   if (typeof answer.value === "boolean") return answer.value ? "True" : "False";
-  if (typeof answer.value === "number") return `${formatNumber(answer.value)}${q.unit ? ` ${q.unit}` : ""}`;
+  if (typeof answer.value === "number") return `${formatValue(answer.value, q.unit)}${q.unit ? ` ${q.unit}` : ""}`;
   return "?";
 }
 
+/** Points and counts, grouped: "4,821". */
 export function formatNumber(n: number): string {
-  return Number.isInteger(n) && Math.abs(n) >= 1000 && Math.abs(n) < 2100 ? String(n) : n.toLocaleString("en");
+  return n.toLocaleString("en");
+}
+
+/**
+ * An estimate's value: a year stays "1983" (never "1,983"); anything else is grouped. Year questions have no unit
+ * (or "year"), so a whole number from 1000 to 2999 without another unit reads as a year.
+ */
+export function formatValue(n: number, unit: string | null): string {
+  const yearish = !unit?.trim() || /^years?$/i.test(unit.trim());
+  return yearish && Number.isInteger(n) && n >= 1000 && n <= 2999 ? String(n) : formatNumber(n);
 }
 
 /** The source's article title, from its Wikipedia URL: "Source: Wikipedia, Canberra". */

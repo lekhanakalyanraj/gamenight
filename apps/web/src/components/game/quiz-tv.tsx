@@ -15,6 +15,7 @@ import {
   currentQuestion,
   type EstimateResults,
   formatNumber,
+  formatValue,
   isOpen,
   KIND_HOW,
   KIND_LABEL,
@@ -174,7 +175,7 @@ function RevealStage({ question, names }: { question: QuizQuestion; names: Map<s
           </motion.p>
           {results?.closest?.length ? (
             <p className="text-4xl">
-              Closest: {results.closest.map((c) => `${names.get(c.member_id) ?? "?"} (${formatNumber(Number(c.value))})`).join(", ")}
+              Closest: {results.closest.map((c) => `${names.get(c.member_id) ?? "?"} (${formatValue(Number(c.value), question.unit)})`).join(", ")}
             </p>
           ) : <p className="text-4xl text-muted">Nobody guessed.</p>}
         </div>

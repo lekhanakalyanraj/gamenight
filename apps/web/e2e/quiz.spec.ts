@@ -45,6 +45,10 @@ async function tapIfShown(target: Locator): Promise<boolean> {
   }
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** Every quiz_questions row inside a Realtime message (they nest a few levels deep). */
 function questionRows(value: unknown, found: Record<string, unknown>[] = []): Record<string, unknown>[] {
   if (Array.isArray(value)) for (const v of value) questionRows(v, found);
@@ -214,7 +218,7 @@ test("a TV and five phones play a whole quiz, and no answer shows before its rev
     if (!/estimate/i.test(kinds.get(number) ?? "")) continue; // the options are on screen by design; checked by [data-correct]
     const value = answer.split(" ")[0];
     for (const text of seenBefore.get(number) ?? []) {
-      expect(new RegExp(`(^|[^\\d.,])${value.replace(/[.]/g, "\\.")}([^\\d]|$)`).test(text),
+      expect(new RegExp(`(^|[^\\d.,])${escapeRegExp(value)}([^\\d]|$)`).test(text),
              `question ${number}'s answer (${value}) was on a screen before its reveal`).toBe(false);
     }
   }
