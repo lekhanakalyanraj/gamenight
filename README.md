@@ -25,7 +25,7 @@ A multiplayer party-game platform: a **TV** hosts the room, players join from th
 | 4b | Kubernetes: every service in kind under the restricted profile, network policies proven enforced, CI deploys and plays there | **done** |
 | 5 | Quiz Night: grounded questions with sources, answers on phones, speed scoring, picture rounds | **done** |
 | 6 | Heads Up: the word on the TV, the guesser's back to it; AI decks from the group's interests | **done** |
-| 7 | Eval suite, dashboards, load test | |
+| 7 | Eval suite, dashboards, load test | **done** |
 
 ## Services
 
@@ -234,7 +234,15 @@ phone → web (Next.js, @vercel/otel) → Supabase RPC, carrying traceparent →
   - dispatcher and agents: the OpenTelemetry SDK;
   - catalog: a span per request.
 - **Model and tool spans** use OpenTelemetry's GenAI conventions (`gen_ai.request.model`, `gen_ai.usage.input_tokens`, ...).
-- **The stack** is an OpenTelemetry Collector feeding Tempo (traces, span metrics, service graph), Prometheus and Loki, with a provisioned **gamenight** Grafana dashboard: service map, p95 by step, dispatch lag, tokens, errors, and recent traces.
+- **The stack** is an OpenTelemetry Collector feeding Tempo (traces, span metrics, service graph), Prometheus and Loki, with two provisioned Grafana dashboards:
+  - **gamenight** (the services): service map, p95 by step, dispatch lag, tokens, errors, and recent traces.
+  - **games** (the games themselves, against the targets below):
+    - rooms open, players in them, and games running by kind (the dispatcher reads the counts every 15 s; counts only);
+    - event to the game master's move (target 5 s) and narrate to clip ready (target 4 s), p50 and p95;
+    - game-master turn time, the illegal-move rate and the recovery rate (target 99%), and model calls per turn;
+    - estimated model cost per game and per hour, by game (tokens × a price table in the agents' code; a model without a price counts tokens, never a guessed cost);
+    - narrator rejections and stalls caught.
+- **No dead panels:** `scripts/check-dashboards.py` (in `make services-test`, so CI) fails if a dashboard queries a metric no service emits.
 
 ```bash
 make images services-up        # every service plus the collector stack; Grafana at http://localhost:3300
@@ -353,6 +361,44 @@ cd services/agents && uv run python -m evals.run_headsup_attacks --gate
 **Heads Up card review** runs the reviewer on 39 hand-checked cards in four interest and rating groups. Good cards must be kept; bad ones must be dropped: a private person, a drink in a family room, a sentence or a list instead of one thing, something far too obscure, or a card telling the reviewer to keep it. The gate: no bad card kept, and at least 80% of the good ones kept. **Attacks on the commentator** (11 cases, 4 of them controls) put card names and instructions in players' nicknames. Every line is graded in code: no card that isn't public, no early winner, a line at every moment, and the next turn started.
 
 **Quiz accuracy** runs the question verifier on 41 hand-checked candidates: 22 real questions with their real Wikipedia sentences, and 19 broken copies of them. The broken ones have a wrong option keyed, true and false flipped, a wrong year, an invented quote, a real sentence from the wrong article, two right options, an ambiguous or dated question, a sentence that doesn't state the answer, or a question telling the judge to pass it. Each is tagged with the layer that must drop it, code or judge. The gate: no broken question is kept, and at least 80% of the good ones are, so a verifier that drops everything fails too. `--generate` also writes fresh questions for a topic and reports what was kept, flagging any kept question whose sentence doesn't literally contain its answer.
+
+## Eval results
+
+The latest run on `main` (the merge of #34, 2 October 2026; Haiku 4.5 throughout). Every `evals` run ends with this table in its summary (`scripts/eval-report.py`), even when a gate fails.
+
+| Suite | Gate | Passed | Notes |
+|---|---|---|---|
+| Golden (host chat, lobby) | hard checks | 28/28 | judge mean 4.2/5 |
+| Leak attacks: Undercover game master | every case | 20/20 | 69 model calls |
+| Leak attacks: quiz master | every case | 14/14 | 59 model calls |
+| Attacks: Heads Up commentator | every case | 11/11 | 23 model calls |
+| Narration (14 moments) | every case | 14/14 | 56 model calls |
+| Quiz accuracy | no broken question kept | 19/19 broken dropped | 22/22 good kept; fresh: cricket 5 kept, Indian food 2 kept |
+| Heads Up card review | no bad card kept | 15/15 bad dropped | 22/24 good kept; fresh: 90s Bollywood 11/30, space travel 21/30 |
+
+The two good cards dropped (Pani puri and Masala dosa, "not well known") came from the reviewer being told the region as a code ("IN"); it's now told the name ("India").
+
+**The game master runs on Haiku 4.5.** A comparison with Sonnet on the same evals is one manual run away; it hasn't been worth the credits while every gate passes on Haiku.
+
+## Load test
+
+The simulator plays many rooms at once, each with its own host, TV and bots, mixing the three games through the whole pipeline (dispatcher, Agent Server, narrator, voice) on the free scripted model. It reports against the design targets:
+
+| Target | |
+|---|---|
+| Tap → own screen | < 300 ms p95 (a player move's round trip: the phone redraws from the reply) |
+| Phase complete → next phase on the TV | < 5 s p95 |
+| Narrate → clip ready | < 4 s p95 |
+| Games completed | ≥ 98%, with 0 leaks |
+
+Leaks and completion always gate; the latency targets gate with `--strict`, since they depend on the machine.
+
+```bash
+make load ROOMS=3 GAMES_LOAD=6     # needs agents-dev (GAMENIGHT_MODEL=fake) and dispatcher-dev; VOICE=1 with voice-dev
+gh workflow run load.yml -f rooms=25 -f games=50   # on GitHub's runner; also every Monday
+```
+
+A local run on a laptop (3 rooms at once, 6 mixed games, 27 players, no voice): 0 leaks, 100% completed, tap to own screen 15 ms p95, phase complete to next phase 3 s p95. CI runs a 3-room load test on every PR, and the `load` workflow runs 25 rooms (about 150 bots) each week, with its report in the run's summary.
 
 ## Layout
 

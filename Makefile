@@ -75,6 +75,8 @@ dispatcher-dev:  ## the dispatcher, pointed at agents-dev (health on :8134)
 	cd services/dispatcher && $(OTEL_ENV) PORT=8134 AGENTS_URL=http://127.0.0.1:2024 AGENTS_SERVICE_TOKEN=$(AGENTS_SERVICE_TOKEN) \
 	  DATABASE_URL=postgresql://dispatcher_svc:local-dev-dispatcher@$(LOCAL_DB) uv run python -m gamenight_dispatcher
 GAMENIGHT_VOICE ?= fake
+ROOMS ?= 3
+GAMES_LOAD ?= 6
 voice-dev:       ## the voice service on :8135: a free tone by default; GAMENIGHT_VOICE=elevenlabs speaks (needs ELEVENLABS_API_KEY)
 	@key=$$(npx supabase status -o env | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$$/\1/p'); \
 	cd services/voice && $(OTEL_ENV) PORT=8135 GAMENIGHT_VOICE=$(GAMENIGHT_VOICE) \
@@ -138,7 +140,8 @@ scan-image:      ## Grype any image: fail on fixable high or critical vulnerabil
 sbom:            ## Syft: SPDX SBOM for IMAGE=... into OUT=...
 	docker run --rm $(DOCKER_SOCK) -v "$(CURDIR)":/out $(SYFT) $(IMAGE) -o spdx-json=/out/$(OUT)
 
-services-test:   ## lint and test the dispatcher, voice and catalog services
+services-test:   ## lint and test the dispatcher, voice and catalog services, and check the dashboards' metric names
+	python3 scripts/check-dashboards.py
 	cd services/dispatcher && uv run ruff check . && uv run pytest -q
 	cd services/voice && uv run ruff check . && uv run pytest -q
 	npm run typecheck -w @gamenight/catalog && npm test -w @gamenight/catalog
@@ -162,6 +165,11 @@ simulate:        ## play GAMES simulated games (default 20) of GAME (undercover,
 	@key=$$(npx supabase status -o env | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$$/\1/p'); \
 	cd evals/simulator && SUPABASE_PUBLISHABLE_KEY=$$key AGENTS_SERVICE_TOKEN=$(AGENTS_SERVICE_TOKEN) \
 	  uv run python -m gamenight_simulator --games $(GAMES) --game $(GAME) --game-master $(GM) $(if $(VOICE),--voice)
+load:            ## a load test: ROOMS rooms at once (default 3) play GAMES mixed games (default 6) through the pipeline (needs agents-dev, dispatcher-dev; VOICE=1 voice-dev)
+	@key=$$(npx supabase status -o env | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$$/\1/p'); \
+	cd evals/simulator && SUPABASE_PUBLISHABLE_KEY=$$key AGENTS_SERVICE_TOKEN=$(AGENTS_SERVICE_TOKEN) \
+	  uv run python -m gamenight_simulator --load $(ROOMS) --games $(GAMES_LOAD) --game mixed --game-master agents \
+	  --max-players 8 $(if $(VOICE),--voice) --report-md $(CURDIR)/load-report.md --report $(CURDIR)/load-report.json
 simulator-test:  ## lint and unit-test the game simulator
 	cd evals/simulator && uv run ruff check . && uv run pytest -q
 

@@ -11,6 +11,7 @@ model budget. Host chat never runs here, and nothing here streams to a phone.
 from __future__ import annotations
 
 import random
+import time
 from operator import add
 from typing import Annotated, Any, TypedDict
 
@@ -19,7 +20,7 @@ from langgraph.graph import END, START, StateGraph
 
 from gamenight_agents import game_master, game_rules, games, headsup_commentator, headsup_rules, quiz_master, quiz_rules
 from gamenight_agents.settings import model_provider
-from gamenight_agents.telemetry import GenAITracer, run_span
+from gamenight_agents.telemetry import GenAITracer, record_turn, run_span
 from gamenight_agents.turn import Turn, current
 
 # Model calls a game may use; after that the scripted rules finish it, so a runaway loop can't run up cost.
@@ -53,7 +54,9 @@ async def run_game_master(state: GameState, config: RunnableConfig) -> dict:
         live = live_events(events, game["step"])
         if not live:
             return {"events": None, "runs": 1, "stale_runs": 1}
-        turn = Turn(game_id, live[-1]["id"], live, random.Random(live[-1]["id"]), callbacks=[GenAITracer()])
+        turn = Turn(game_id, live[-1]["id"], live, random.Random(live[-1]["id"]),
+                    callbacks=[GenAITracer(game=game["kind"])])
+        started = time.monotonic()
         token = current.set(turn)
         try:
             scripted = model_provider() == "fake" or state.get("model_calls", 0) >= GAME_MODEL_BUDGET
@@ -67,6 +70,7 @@ async def run_game_master(state: GameState, config: RunnableConfig) -> dict:
                 await game_master.play(turn, config)
         finally:
             current.reset(token)
+            record_turn(game["kind"], turn, time.monotonic() - started, live)
     return {"events": None, "runs": 1, "model_calls": turn.model_calls, "refused": turn.refused,
             "lines_rejected": turn.lines_rejected, "stalls_caught": turn.stalls_caught}
 

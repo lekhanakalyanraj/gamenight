@@ -112,6 +112,16 @@ def test_a_leaky_line_goes_back_once_then_a_stock_line_is_shown(shown):
     assert turn.lines_rejected == 2
 
 
+def test_a_line_over_200_characters_goes_back_for_a_shorter_one_never_cut_off(shown):
+    # Regression (slice 7's evals): the prompts and evals say under 200, but the narrator allowed 280, so a long
+    # finale reached the TV.
+    turn = Turn("g", EVENT, [], random.Random(1))
+    long = "What a game! " * 17  # 221 characters
+    first = asyncio.run(narrator.narrate(turn, long))
+    assert not first["shown"] and "keep it under 200" in first["rejected"][0]
+    assert asyncio.run(narrator.narrate(turn, "What a game!"))["shown"]
+
+
 def test_clean_lines_are_shown_up_to_two_a_turn(shown):
     turn = Turn("g", EVENT, [], random.Random(1))
     for line in ("The detective narrows their eyes.", "Nobody leaves this room."):

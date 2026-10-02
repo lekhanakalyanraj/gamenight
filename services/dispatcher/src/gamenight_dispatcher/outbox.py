@@ -12,7 +12,8 @@ MAX_ATTEMPTS = 5
 
 CLAIM = """
 select id::text, room_id::text, kind, payload, traceparent, attempts,
-       extract(epoch from now() - created_at) * 1000 as waited_ms
+       extract(epoch from now() - created_at) * 1000 as waited_ms,
+       to_char(created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as created_at
 from dispatch.events
 where dispatched_at is null and failed_at is null and next_attempt_at <= now()
 order by created_at
@@ -45,6 +46,7 @@ class Event:
     traceparent: str | None
     attempts: int
     waited_ms: float = 0.0
+    created_at: str | None = None  # when the database wrote it (UTC, ISO): the agents measure time to their move
 
 
 class Route(NamedTuple):
@@ -72,7 +74,7 @@ def group_by_thread(events: list[Event]) -> "OrderedDict[Route, list[Event]]":
 
 
 def run_input(where: Route, events: list[Event]) -> dict[str, Any]:
-    relayed = [{"id": e.id, "kind": e.kind, "payload": e.payload} for e in events]
+    relayed = [{"id": e.id, "kind": e.kind, "payload": e.payload, "at": e.created_at} for e in events]
     if where.assistant == "game_master":
         return {"kind": "game_event", "game_id": where.thread_id, "room_id": where.room_id, "events": relayed}
     return {"kind": "event", "room_id": where.room_id, "events": relayed}

@@ -51,13 +51,89 @@ def tracer() -> trace.Tracer:
     return trace.get_tracer("gamenight.agents")
 
 
+# US dollars per million tokens (input, output), for the dashboards' cost estimate. A model that isn't listed counts
+# its tokens but no cost, rather than a guessed one.
+PRICES: dict[str, tuple[float, float]] = {
+    "claude-haiku-4-5-20251001": (1.00, 5.00),
+}
+
+
+def cost(model: str, usage: dict[str, int]) -> float | None:
+    """The estimated cost of one model call, or None for a model without a price here."""
+    price = PRICES.get(model)
+    if price is None:
+        return None
+    return (usage.get("input_tokens", 0) * price[0] + usage.get("output_tokens", 0) * price[1]) / 1_000_000
+
+
 @cache
-def _instruments() -> tuple[Any, Any]:
+def _instruments() -> tuple[Any, Any, Any]:
     setup()
     meter = metrics.get_meter("gamenight.agents")
     tokens = meter.create_counter("gamenight.llm.tokens", unit="{token}", description="Model tokens used")
     calls = meter.create_counter("gamenight.llm.calls", unit="{call}", description="Model calls")
-    return tokens, calls
+    dollars = meter.create_counter("gamenight.llm.cost", unit="{USD}", description="Estimated model cost, US dollars")
+    return tokens, calls, dollars
+
+
+# Buckets for timings in seconds, fine around the 5 s target (the SDK's defaults suit milliseconds: every timing
+# here would land in 0-5 and every p95 read 4.75).
+SECONDS = [0.25, 0.5, 1, 1.5, 2, 3, 4, 5, 7.5, 10, 15, 20, 30, 60]
+
+
+@cache
+def game_instruments() -> dict[str, Any]:
+    """The game master's numbers, by game kind: how long a turn takes, how long from the event that woke it, how many
+    model calls it makes, and how often the database refuses one of its moves (and whether it then made a legal one)."""
+    setup()
+    meter = metrics.get_meter("gamenight.agents")
+    return {
+        "run": meter.create_histogram("gamenight.game_master.run", unit="s", description="One game-master turn",
+                                      explicit_bucket_boundaries_advisory=SECONDS),
+        "event_to_done": meter.create_histogram(
+            "gamenight.game.event_to_done", unit="s",
+            description="From the database writing an event to the game master finishing its turn",
+            explicit_bucket_boundaries_advisory=SECONDS),
+        "turns": meter.create_counter("gamenight.game_master.turns", unit="{turn}", description="Game-master turns"),
+        "model_calls": meter.create_counter("gamenight.game_master.model_calls", unit="{call}",
+                                            description="Model calls in game-master turns"),
+        "refused": meter.create_counter("gamenight.game_master.refused", unit="{move}",
+                                        description="Game-master moves the database refused (illegal moves)"),
+        "refused_turns": meter.create_counter("gamenight.game_master.refused_turns", unit="{turn}",
+                                              description="Turns with at least one refused move"),
+        "recovered": meter.create_counter("gamenight.game_master.recovered", unit="{turn}",
+                                          description="Turns with a refused move that still moved the game on"),
+        "lines_rejected": meter.create_counter("gamenight.narrator.rejected", unit="{line}",
+                                               description="Lines the narrator's checks rejected"),
+        "stalls_caught": meter.create_counter("gamenight.game_master.stalls_caught", unit="{turn}",
+                                              description="Turns that left the game waiting, asked again"),
+        "finished": meter.create_counter("gamenight.games.finished", unit="{game}",
+                                         description="Games that reached their end (for cost per game)"),
+    }
+
+
+def record_turn(kind: str, turn: Any, seconds: float, events: list[dict[str, Any]]) -> None:
+    """A game-master turn's numbers, for the dashboards. events: the turn's live events (each with "at", when the
+    database wrote it, if the dispatcher sent it)."""
+    from datetime import UTC, datetime
+
+    m, labels = game_instruments(), {"gamenight.game.kind": kind}
+    m["run"].record(seconds, labels)
+    m["turns"].add(1, labels)
+    m["model_calls"].add(turn.model_calls, labels)
+    m["lines_rejected"].add(turn.lines_rejected, labels)
+    m["stalls_caught"].add(turn.stalls_caught, labels)
+    if turn.refused:
+        m["refused"].add(turn.refused, labels)
+        m["refused_turns"].add(1, labels)
+        if turn.moved:
+            m["recovered"].add(1, labels)
+    if any(e.get("kind") == "game_ended" for e in events):
+        m["finished"].add(1, labels)
+    now = datetime.now(UTC)
+    for at in (e.get("at") for e in events):
+        if at:
+            m["event_to_done"].record((now - datetime.fromisoformat(at)).total_seconds(), labels)
 
 
 @contextmanager
@@ -83,9 +159,11 @@ def current_traceparent() -> str | None:
 class GenAITracer(AsyncCallbackHandler):
     """Model and tool calls as OpenTelemetry spans with gen_ai.* attributes, nested under the current span."""
 
-    def __init__(self) -> None:
+    def __init__(self, game: str = "other") -> None:
+        """game: what the calls are for (a game kind, "lobby" or "chat"), so cost can be told apart by game."""
         self._spans: dict[UUID, Span] = {}
         self._models: dict[UUID, str] = {}
+        self._game = game
 
     def _start(self, run_id: UUID, parent_run_id: UUID | None, name: str, attributes: dict[str, Any]) -> None:
         parent = self._spans.get(parent_run_id) if parent_run_id else None
@@ -118,11 +196,14 @@ class GenAITracer(AsyncCallbackHandler):
             model = self._models.pop(run_id, "unknown")
             for key, value in usage.items():
                 span.set_attribute(f"gen_ai.usage.{key}", value)
-            tokens, calls = _instruments()
-            calls.add(1, {"gen_ai.request.model": model})
+            tokens, calls, dollars = _instruments()
+            labels = {"gen_ai.request.model": model, "gamenight.game.kind": self._game}
+            calls.add(1, labels)
             for kind in ("input_tokens", "output_tokens"):
                 if kind in usage:
-                    tokens.add(usage[kind], {"gen_ai.request.model": model, "gen_ai.token.type": kind.split("_")[0]})
+                    tokens.add(usage[kind], labels | {"gen_ai.token.type": kind.split("_")[0]})
+            if (spent := cost(model, usage)) is not None:
+                dollars.add(spent, labels)
         self._end(run_id)
 
     async def on_llm_error(self, error, *, run_id, parent_run_id=None, **kwargs):

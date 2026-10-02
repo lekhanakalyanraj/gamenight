@@ -4,7 +4,7 @@ create extension if not exists pgtap with schema extensions;
 -- Each service role reaches only its own schema. These checks cover every table in every
 -- application schema, including ones added later, so a cross-service shortcut fails CI.
 
-select plan(8);
+select plan(11);
 
 create temp table svc (role text, own_schema text) on commit drop;
 insert into svc values ('dispatcher_svc', 'dispatch'), ('voice_svc', 'narration'), ('catalog_svc', 'catalog'),
@@ -67,6 +67,21 @@ select throws_ok($$ set local role catalog_svc; insert into catalog.games values
                  '42501', null, 'the catalogue is read-only for the catalog service');
 select throws_ok($$ set local role voice_svc; select * from catalog.games $$,
                  '42501', null, 'the voice service cannot read the catalogue');
+
+-- The dashboards' operations numbers: the dispatcher reads counts, and nothing more; nobody else may ask.
+grant dispatcher_svc to postgres;
+create function pg_temp.ops() returns jsonb language plpgsql as $$
+declare r jsonb;
+begin
+  set local role dispatcher_svc;
+  r := dispatch.ops_stats();
+  reset role;
+  return r;
+end $$;
+select is((select array_agg(k order by k) from jsonb_object_keys(pg_temp.ops()) k),
+          array['games_running', 'players_in_rooms', 'rooms_open'], 'the dispatcher reads the operations numbers');
+select ok(pg_temp.ops()::text !~ '[0-9a-f]{8}-[0-9a-f]{4}-', 'counts only: never an id');
+select ok(not has_function_privilege('authenticated', 'dispatch.ops_stats()', 'execute'), 'players can''t ask');
 
 select * from finish();
 rollback;

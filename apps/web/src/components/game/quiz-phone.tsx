@@ -76,6 +76,9 @@ export default function PhoneQuiz({ live, meId, isHost, onBackToLobby }: {
 
   const asked = questions.length;
   const ended = game.phase === "ended" && !showingFinalReveal(game, question, now);
+  const intro = !question || (game.phase === "reveal" && !game.phase_deadline && nextIsNewRound(game, asked));
+  // The screen's key is what it shows, so the game ending under the last reveal doesn't replay it.
+  const view = ended ? "ended" : intro ? "intro" : open ? "open" : question?.revealed_at ? "reveal" : "waiting";
   const heading = ended ? "Final scores"
     : question ? `Question ${question.number} of ${totalQuestions(game)}` : "Quiz Night";
 
@@ -97,13 +100,13 @@ export default function PhoneQuiz({ live, meId, isHost, onBackToLobby }: {
 
         {game.paused_at ? <Banner>Paused by the host</Banner> : null}
 
-        <PhaseTitle id={`${ended ? "ended" : "playing"}-${question?.number ?? 0}-${Boolean(question?.revealed_at)}-${game.phase_deadline === null}`}
+        <PhaseTitle id={`${view}-${question?.number ?? 0}`}
                     className="flex flex-col gap-4">
           {ended ? (
             <FinalScores scores={scores} names={names} meId={meId}>
               <Button onClick={onBackToLobby}>{isHost ? "Play again" : "Back to the lobby"}</Button>
             </FinalScores>
-          ) : !question || (game.phase === "reveal" && !game.phase_deadline && nextIsNewRound(game, asked)) ? (
+          ) : intro ? (
             <RoundIntro {...nextRound(game, asked)} />
           ) : open ? (
             <QuestionView question={question} names={names} mine={mine} pending={pending} onAnswer={answer}

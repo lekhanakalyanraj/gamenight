@@ -156,3 +156,7 @@ def test_a_model_failure_falls_back_to_the_scripted_line(monkeypatch, said):
     monkeypatch.setattr(headsup_commentator, "game_master_model", lambda: model)
     asyncio.run(headsup_commentator.speak(turn(), MOMENT, state("guessing")))
     assert said == ["3 in a row for Asha! Keep it going!"]
+
+
+def test_the_region_is_named_for_the_model():
+    assert headsup_content.region_text("IN") == ", in India" and headsup_content.region_text(None) == ""

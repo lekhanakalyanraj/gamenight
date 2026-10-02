@@ -66,8 +66,13 @@ class Review(BaseModel):
     verdicts: list[CardVerdict]
 
 
+# The room's region by name: the models judge "well known in India" far better than "well known in IN" (which
+# dropped Pani puri and Masala dosa as not well known).
+REGIONS = {"IN": "India", "GB": "the UK", "US": "the US"}
+
+
 def region_text(region: str | None) -> str:
-    return f", in {region}" if region else ""
+    return f", in {REGIONS.get(region, region)}" if region else ""
 
 
 def clean(card: Any) -> str | None:
