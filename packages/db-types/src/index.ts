@@ -13,3 +13,6 @@ export type GamePlayer = Public["Tables"]["game_players"]["Row"];
 export type GameResult = Public["Tables"]["game_results"]["Row"];
 export type Secret = Public["Tables"]["secrets"]["Row"];
 export type GameAction = Public["Tables"]["game_actions"]["Row"];
+export type QuizQuestion = Public["Tables"]["quiz_questions"]["Row"];
+export type QuizAnswer = Public["Tables"]["quiz_answers"]["Row"];
+export type QuizScore = Public["Tables"]["quiz_scores"]["Row"];

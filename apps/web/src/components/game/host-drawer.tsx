@@ -29,8 +29,13 @@ export function HostDrawer({ game, roomId, voice }: { game: Game; roomId: string
 
   const paused = Boolean(game.paused_at);
   const hasClock = Boolean(game.phase_deadline || game.paused_phase_left);
+  const quiz = game.kind === "quiz";
   const speaking = game.phase === "clues" && game.turn_index !== null;
-  const canSkipPhase = ["clues", "discussion", "vote", "guess"].includes(game.phase) && !game.resolved;
+  // A quiz: close the open question early, or cut the reveal's pause short (the database checks both).
+  const canSkipPhase = quiz
+    ? (game.phase === "question" || game.phase === "reveal") && Boolean(game.phase_deadline)
+    : ["clues", "discussion", "vote", "guess"].includes(game.phase) && !game.resolved;
+  const skipLabel = !quiz ? "Skip phase" : game.phase === "reveal" ? "Skip the wait" : "Close the question";
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md px-3 pb-3">
@@ -50,11 +55,13 @@ export function HostDrawer({ game, roomId, voice }: { game: Game; roomId: string
                 {paused ? "Resume" : "Pause"}
               </Button>
               <Button variant="secondary" disabled={pending || !hasClock} onClick={() => control("extend")}>+30 seconds</Button>
-              <Button variant="secondary" disabled={pending || paused || !speaking} onClick={() => control("skip_turn")}>
-                Skip speaker
-              </Button>
+              {quiz ? null : (
+                <Button variant="secondary" disabled={pending || paused || !speaking} onClick={() => control("skip_turn")}>
+                  Skip speaker
+                </Button>
+              )}
               <Button variant="secondary" disabled={pending || paused || !canSkipPhase} onClick={() => control("skip_phase")}>
-                Skip phase
+                {skipLabel}
               </Button>
             </div>
             {confirmEnd ? (

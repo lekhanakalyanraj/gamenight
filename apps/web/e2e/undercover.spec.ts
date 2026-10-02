@@ -90,7 +90,7 @@ test("a TV and five phones play a whole game, and nothing secret shows", async (
   }
 
   // The host starts Undercover; every screen switches to the game.
-  await host.page.getByRole("button", { name: "Food" }).click();
+  await host.page.getByRole("group", { name: "Theme for the secret words" }).getByRole("button", { name: "Food" }).click();
   await host.page.getByRole("button", { name: "Start Undercover" }).click();
   await expect(tv.getByTestId("tv-game")).toBeVisible({ timeout: 30_000 });
   for (const phone of phones) await expect(phone.page.getByTestId("phone-game")).toBeVisible();

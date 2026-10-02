@@ -186,6 +186,99 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"quiz_answers": {
+                  Row: {
+                    "action_id": string,"answer": NonNullable<Json>,"answered_at": string,"correct": boolean | null,"game_id": string,"joker": boolean,"member_id": string,"number": number,"points": number | null,"room_id": string
+                  }
+                  Insert: {
+                    "action_id": string,"answer": NonNullable<Json>,"answered_at"?: string,"correct"?: boolean | null,"game_id": string,"joker"?: boolean,"member_id": string,"number": number,"points"?: number | null,"room_id": string
+                  }
+                  Update: {
+                    "action_id"?: string,"answer"?: NonNullable<Json>,"answered_at"?: string,"correct"?: boolean | null,"game_id"?: string,"joker"?: boolean,"member_id"?: string,"number"?: number,"points"?: number | null,"room_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "quiz_answers_game_id_fkey"
+      columns: ["game_id"]
+isOneToOne: false
+      referencedRelation: "games"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "quiz_answers_member_id_fkey"
+      columns: ["member_id"]
+isOneToOne: false
+      referencedRelation: "room_members"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "quiz_answers_room_id_fkey"
+      columns: ["room_id"]
+isOneToOne: false
+      referencedRelation: "rooms"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"quiz_questions": {
+                  Row: {
+                    "answer": Json | null,"difficulty": number,"for_member": string | null,"game_id": string,"image_credit": Json | null,"image_path": string | null,"kind": string,"number": number,"opened_at": string,"options": Json | null,"prompt": string,"results": Json | null,"revealed_at": string | null,"room_id": string,"round": number,"seconds": number,"source_url": string | null,"step": number,"topic": string,"unit": string | null
+                  }
+                  Insert: {
+                    "answer"?: Json | null,"difficulty": number,"for_member"?: string | null,"game_id": string,"image_credit"?: Json | null,"image_path"?: string | null,"kind": string,"number": number,"opened_at"?: string,"options"?: Json | null,"prompt": string,"results"?: Json | null,"revealed_at"?: string | null,"room_id": string,"round": number,"seconds": number,"source_url"?: string | null,"step": number,"topic": string,"unit"?: string | null
+                  }
+                  Update: {
+                    "answer"?: Json | null,"difficulty"?: number,"for_member"?: string | null,"game_id"?: string,"image_credit"?: Json | null,"image_path"?: string | null,"kind"?: string,"number"?: number,"opened_at"?: string,"options"?: Json | null,"prompt"?: string,"results"?: Json | null,"revealed_at"?: string | null,"room_id"?: string,"round"?: number,"seconds"?: number,"source_url"?: string | null,"step"?: number,"topic"?: string,"unit"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "quiz_questions_for_member_fkey"
+      columns: ["for_member"]
+isOneToOne: false
+      referencedRelation: "room_members"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "quiz_questions_game_id_fkey"
+      columns: ["game_id"]
+isOneToOne: false
+      referencedRelation: "games"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "quiz_questions_room_id_fkey"
+      columns: ["room_id"]
+isOneToOne: false
+      referencedRelation: "rooms"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"quiz_scores": {
+                  Row: {
+                    "correct": number,"game_id": string,"joker_on": number | null,"jokers": number,"member_id": string,"points": number,"room_id": string
+                  }
+                  Insert: {
+                    "correct"?: number,"game_id": string,"joker_on"?: number | null,"jokers"?: number,"member_id": string,"points"?: number,"room_id": string
+                  }
+                  Update: {
+                    "correct"?: number,"game_id"?: string,"joker_on"?: number | null,"jokers"?: number,"member_id"?: string,"points"?: number,"room_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "quiz_scores_game_id_fkey"
+      columns: ["game_id"]
+isOneToOne: false
+      referencedRelation: "games"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "quiz_scores_member_id_fkey"
+      columns: ["member_id"]
+isOneToOne: false
+      referencedRelation: "room_members"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "quiz_scores_room_id_fkey"
+      columns: ["room_id"]
+isOneToOne: false
+      referencedRelation: "rooms"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"room_displays": {
                   Row: {
                     "id": string,"paired_at": string,"room_id": string,"user_id": string
@@ -207,13 +300,13 @@ isOneToOne: false
                   ]
                 },"room_members": {
                   Row: {
-                    "adult_confirmed": boolean,"id": string,"joined_at": string,"left_at": string | null,"nickname": string,"removed_by_host": boolean,"role": Database["public"]['Enums']["member_role"],"room_id": string,"user_id": string
+                    "adult_confirmed": boolean,"id": string,"joined_at": string,"left_at": string | null,"nickname": string,"removed_by_host": boolean,"role": Database["public"]['Enums']["member_role"],"room_id": string,"topic": string | null,"user_id": string
                   }
                   Insert: {
-                    "adult_confirmed"?: boolean,"id"?: string,"joined_at"?: string,"left_at"?: string | null,"nickname": string,"removed_by_host"?: boolean,"role"?: Database["public"]['Enums']["member_role"],"room_id": string,"user_id": string
+                    "adult_confirmed"?: boolean,"id"?: string,"joined_at"?: string,"left_at"?: string | null,"nickname": string,"removed_by_host"?: boolean,"role"?: Database["public"]['Enums']["member_role"],"room_id": string,"topic"?: string | null,"user_id": string
                   }
                   Update: {
-                    "adult_confirmed"?: boolean,"id"?: string,"joined_at"?: string,"left_at"?: string | null,"nickname"?: string,"removed_by_host"?: boolean,"role"?: Database["public"]['Enums']["member_role"],"room_id"?: string,"user_id"?: string
+                    "adult_confirmed"?: boolean,"id"?: string,"joined_at"?: string,"left_at"?: string | null,"nickname"?: string,"removed_by_host"?: boolean,"role"?: Database["public"]['Enums']["member_role"],"room_id"?: string,"topic"?: string | null,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -268,7 +361,26 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "create_room":
+            "answer_question":
+{ Args: { "p_action_id": string,"p_answer": Json,"p_game_id": string }; Returns: {
+              "action_id": string,
+"answer": NonNullable<Json>,
+"answered_at": string,
+"correct": boolean | null,
+"game_id": string,
+"joker": boolean,
+"member_id": string,
+"number": number,
+"points": number | null,
+"room_id": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "quiz_answers"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"create_room":
 { Args: { "p_age_rating"?: Database["public"]['Enums']["age_rating"],"p_confirm_adult"?: boolean,"p_nickname": string }; Returns: {
               "age_rating": Database["public"]['Enums']["age_rating"],
 "closed_at": string | null,
@@ -367,6 +479,7 @@ isOneToOne: false
 "removed_by_host": boolean,
 "role": Database["public"]['Enums']["member_role"],
 "room_id": string,
+"topic": string | null,
 "user_id": string
             }
                           SetofOptions: {
@@ -431,6 +544,22 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"play_joker":
+{ Args: { "p_game_id": string }; Returns: {
+              "correct": number,
+"game_id": string,
+"joker_on": number | null,
+"jokers": number,
+"member_id": string,
+"points": number,
+"room_id": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "quiz_scores"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
 "remove_display":
 { Args: { "p_display_id": string }; Returns: undefined
                            },
@@ -465,6 +594,25 @@ isOneToOne: false
                           SetofOptions: {
         from: "*"
         to: "games"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"set_topic":
+{ Args: { "p_room_id": string,"p_topic": string }; Returns: {
+              "adult_confirmed": boolean,
+"id": string,
+"joined_at": string,
+"left_at": string | null,
+"nickname": string,
+"removed_by_host": boolean,
+"role": Database["public"]['Enums']["member_role"],
+"room_id": string,
+"topic": string | null,
+"user_id": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "room_members"
         isOneToOne: true
         isSetofReturn: false
       } },
@@ -630,7 +778,7 @@ isOneToOne: false
       } }
           }
           Enums: {
-            "age_rating": "family"|"teen"|"adult","game_kind": "undercover","game_phase": "setup"|"clues"|"discussion"|"vote"|"guess"|"ended","member_role": "host"|"player","room_status": "lobby"|"playing"|"closed"
+            "age_rating": "family"|"teen"|"adult","game_kind": "undercover"|"quiz","game_phase": "setup"|"clues"|"discussion"|"vote"|"guess"|"ended"|"question"|"reveal","member_role": "host"|"player","room_status": "lobby"|"playing"|"closed"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -750,7 +898,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "age_rating": ["family", "teen", "adult"],"game_kind": ["undercover"],"game_phase": ["setup", "clues", "discussion", "vote", "guess", "ended"],"member_role": ["host", "player"],"room_status": ["lobby", "playing", "closed"]
+            "age_rating": ["family", "teen", "adult"],"game_kind": ["undercover", "quiz"],"game_phase": ["setup", "clues", "discussion", "vote", "guess", "ended", "question", "reveal"],"member_role": ["host", "player"],"room_status": ["lobby", "playing", "closed"]
           }
         }
 } as const

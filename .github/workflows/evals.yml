@@ -1,18 +1,19 @@
 name: evals
 
 # The AI evals, on the real model (Haiku) with the Anthropic key in the `evals` environment (its own workspace,
-# $10/month limit), never given to pull requests from forks.
-#   tier 1: pull requests that change the agents, the game or the simulator; 3 real-model games
-#   tier 2: Mondays, if main has changed since the last run; 10 real-model games
+# $10/month limit), never given to pull requests from forks. They cost real credits, so they run when asked:
+#   pull requests that change AI behaviour (agents, dispatcher, simulator, catalog, migrations): once the PR has the
+#     `run-evals` label, which goes on after its last code change; 3 real-model games. Until then the `evals` check
+#     fails with a note to add the label, so nothing that changes AI behaviour merges untested. Pull requests that
+#     change nothing AI-related (web, Dockerfiles, docs, tests) skip it, which passes.
+#   by hand (workflow_dispatch): any branch, any number of games (10 for a slice sign-off).
 # Deterministic checks gate: the golden evals' hard checks, the leak attacks on the game master and the quiz
 # master, quiz accuracy (no broken question kept), narration's hard checks, and 0 leaks in real-model games.
 # Model-graded scores (judges, the host-chat red team) and freshly generated quiz questions report.
-# The job always reports a result (skipped when nothing relevant changed), so it can be a required check.
 
 on:
   pull_request:
-  schedule:
-    - cron: "0 3 * * 1"
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
     inputs:
       games:
@@ -32,9 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: read
     outputs:
-      run: ${{ steps.plan.outputs.run }}
+      state: ${{ steps.plan.outputs.state }}
       games: ${{ steps.plan.outputs.games }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -46,36 +46,33 @@ jobs:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.event.pull_request.base.sha }}
           SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          LABELLED: ${{ contains(github.event.pull_request.labels.*.name, 'run-evals') }}
           DISPATCH_GAMES: ${{ inputs.games }}
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
         run: |
-          run=true
+          # state: run (play the suite), waiting (AI behaviour changed, no label yet: the check fails), none (skip)
+          state=run
           games=3
           case "$EVENT" in
             pull_request)
               if [ "$SAME_REPO" != "true" ]; then
-                run=false
-              elif ! git diff --name-only "$BASE"...HEAD \
-                  | grep -qE '^(services/agents/|services/dispatcher/|evals/simulator/|supabase/migrations/|\.github/workflows/evals\.yml)'; then
-                run=false
+                state=none
+              elif ! git diff --name-only "$BASE"...HEAD | grep -qE \
+                  '^(services/agents/(src/|evals/|pyproject\.toml|uv\.lock|langgraph\.json)|services/dispatcher/src/|services/catalog/src/|evals/simulator/src/|supabase/migrations/|\.github/workflows/evals\.yml)'; then
+                state=none
+              elif [ "$LABELLED" != "true" ]; then
+                state=waiting
               fi ;;
-            schedule)
-              games=10
-              last=$(gh api "repos/$REPO/actions/workflows/evals.yml/runs?event=schedule&status=success&per_page=1" \
-                -q '.workflow_runs[0].head_sha // ""')
-              if [ "$last" = "$GITHUB_SHA" ]; then run=false; fi ;;
             workflow_dispatch)
               games=${DISPATCH_GAMES:-3} ;;
           esac
-          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "state=$state" >> "$GITHUB_OUTPUT"
           echo "games=$games" >> "$GITHUB_OUTPUT"
-          echo "Evals: run=$run, real-model games=$games" >> "$GITHUB_STEP_SUMMARY"
+          echo "Evals: $state, real-model games=$games" >> "$GITHUB_STEP_SUMMARY"
 
   evals:
     name: evals
     needs: plan
-    if: needs.plan.outputs.run == 'true'
+    if: needs.plan.outputs.state != 'none'
     runs-on: ubuntu-latest
     environment: evals
     timeout-minutes: 45
@@ -93,6 +90,13 @@ jobs:
       PROMPTFOO_DISABLE_UPDATE: "1"
       PROMPTFOO_FAILED_TEST_EXIT_CODE: "0" # model-graded: reports; errors still fail the step
     steps:
+      - name: Waiting for the run-evals label
+        if: needs.plan.outputs.state == 'waiting'
+        run: |
+          msg="This PR changes AI behaviour. The real-model evals cost credits, so they run once, when the PR has the run-evals label: add it after the last code change."
+          echo "::error::$msg"
+          echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -150,11 +154,11 @@ jobs:
           { echo "## Real-model games"; echo '```'; tail -n 40 games.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
       - name: Agent Server and dispatcher logs
-        if: failure()
+        if: failure() && needs.plan.outputs.state == 'run'
         run: tail -n 80 agents-dev.log dispatcher-dev.log
 
       - name: Keep the results
-        if: always()
+        if: always() && needs.plan.outputs.state == 'run'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: evals

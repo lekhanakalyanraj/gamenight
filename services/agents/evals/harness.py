@@ -17,8 +17,6 @@ from gamenight_agents.models import host_model
 GAMES = [
     {"slug": "heads-up", "name": "Heads Up", "min_players": 3, "max_players": 16, "minutes": 15,
      "summary": "The guesser turns away from the TV; everyone else gives clues for the word on screen."},
-    {"slug": "mafia", "name": "Mafia", "min_players": 5, "max_players": 16, "minutes": 40,
-     "summary": "A spooky storyteller runs the village. Mafia strike at night; the village votes by day."},
     {"slug": "quiz-night", "name": "Quiz Night", "min_players": 3, "max_players": 16, "minutes": 25,
      "summary": "Mixed rounds on your phones, topics picked by the players, and difficulty that keeps it close."},
     {"slug": "undercover", "name": "Undercover (Mr. White)", "min_players": 3, "max_players": 16, "minutes": 20,

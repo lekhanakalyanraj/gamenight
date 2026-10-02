@@ -1,6 +1,6 @@
 "use client";
 
-import type { Game, GameAction, GamePlayer, GameResult } from "@gamenight/db-types";
+import type { Game, GameAction, GamePlayer, GameResult, QuizAnswer, QuizQuestion, QuizScore } from "@gamenight/db-types";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -63,7 +63,7 @@ function applyGameChange(lobby: Lobby, change: Change): Lobby {
     if (!current || current.game.id !== game.id) {
       // A game we haven't seen: its players and results come with the re-read (see showsGap).
       const newer = !current || game.created_at >= current.game.created_at;
-      return newer ? { ...lobby, game: { game, players: [], results: [] } } : lobby;
+      return newer ? { ...lobby, game: { game, players: [], results: [], questions: [], scores: [] } } : lobby;
     }
     if (game.step < current.game.step) return lobby; // a late broadcast: never go backwards
     return { ...lobby, game: { ...current, game: { ...current.game, ...game } } };
@@ -76,15 +76,29 @@ function applyGameChange(lobby: Lobby, change: Change): Lobby {
       : [...current.players, player];
     return { ...lobby, game: { ...current, players } };
   }
+  if (change.table === "quiz_questions") {
+    const question = row as QuizQuestion;
+    const questions = current.questions.some((q) => q.number === question.number)
+      ? current.questions.map((q) => (q.number === question.number ? { ...q, ...question } : q))
+      : [...current.questions, question];
+    return { ...lobby, game: { ...current, questions } };
+  }
+  if (change.table === "quiz_scores") {
+    const score = row as QuizScore;
+    const scores = current.scores.some((s) => s.member_id === score.member_id)
+      ? current.scores.map((s) => (s.member_id === score.member_id ? { ...s, ...score } : s))
+      : [...current.scores, score];
+    return { ...lobby, game: { ...current, scores } };
+  }
   return { ...lobby, game: { ...current, results: upsert(current.results, row as GameResult) } };
 }
+
+const GAME_TABLES = new Set(["games", "game_players", "game_results", "quiz_questions", "quiz_scores"]);
 
 const MAX_CLIPS = 30;
 
 function applyChange(lobby: Lobby, change: Change): Lobby {
-  if (change.table === "games" || change.table === "game_players" || change.table === "game_results") {
-    return applyGameChange(lobby, change);
-  }
+  if (GAME_TABLES.has(change.table)) return applyGameChange(lobby, change);
   const row = change.record;
   const removedId = change.operation === "DELETE" ? (change.old_record?.id as string | undefined) : undefined;
   switch (change.table) {
@@ -230,27 +244,37 @@ export function useDisplayEvents(
   }, [userId, supabase]);
 }
 
+function upsertAnswer(list: QuizAnswer[], row: QuizAnswer): QuizAnswer[] {
+  return list.some((a) => a.number === row.number)
+    ? list.map((a) => (a.number === row.number ? { ...a, ...row } : a))
+    : [...list, row];
+}
+
 /**
- * A player's own card and moves, on their private `member:{id}` topic: RLS lets only that player join it
- * or read those rows. Re-read on subscribe, when the tab returns, and on request (a missed card).
+ * A player's own card, moves and quiz answers, on their private `member:{id}` topic: RLS lets only that player
+ * join it or read those rows. Re-read on subscribe, when the tab returns, and on request (a missed card).
  */
 export function usePrivateGame(memberId: string, gameId: string | null) {
   const [card, setCard] = useState<Card | null>(null);
   const [moves, setMoves] = useState<GameAction[]>([]);
+  const [answers, setAnswers] = useState<QuizAnswer[]>([]);
   const supabase = useSupabase();
 
   const refetch = useCallback(async () => {
     if (!gameId) {
       setCard(null);
       setMoves([]);
+      setAnswers([]);
       return;
     }
-    const [{ data: secret }, { data: actions }] = await Promise.all([
+    const [{ data: secret }, { data: actions }, { data: mine }] = await Promise.all([
       supabase.from("secrets").select("payload").eq("game_id", gameId).eq("member_id", memberId).maybeSingle(),
       supabase.from("game_actions").select("*").eq("game_id", gameId).eq("member_id", memberId),
+      supabase.from("quiz_answers").select("*").eq("game_id", gameId).eq("member_id", memberId),
     ]);
     setCard((secret?.payload as Card | undefined) ?? null);
     setMoves(actions ?? []);
+    setAnswers(mine ?? []);
   }, [gameId, memberId, supabase]);
 
   useEffect(() => {
@@ -276,6 +300,7 @@ export function usePrivateGame(memberId: string, gameId: string | null) {
           if (!row || row.game_id !== gameId) return;
           if (change.table === "secrets") setCard(row.payload as Card);
           if (change.table === "game_actions") setMoves((current) => upsert(current, row as GameAction));
+          if (change.table === "quiz_answers") setAnswers((current) => upsertAnswer(current, row as QuizAnswer));
         })
         .subscribe((status) => {
           if (status === "SUBSCRIBED" && !cancelled) void refetch();
@@ -290,5 +315,6 @@ export function usePrivateGame(memberId: string, gameId: string | null) {
   }, [memberId, gameId, supabase, refetch]);
 
   const addMove = useCallback((move: GameAction) => setMoves((current) => upsert(current, move)), []);
-  return { card, moves, refetch, addMove };
+  const addAnswer = useCallback((answer: QuizAnswer) => setAnswers((current) => upsertAnswer(current, answer)), []);
+  return { card, moves, answers, refetch, addMove, addAnswer };
 }

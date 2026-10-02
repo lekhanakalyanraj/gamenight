@@ -1,7 +1,16 @@
-import type { Game, GamePlayer, GameResult } from "@gamenight/db-types";
+import type { Game, GamePlayer, GameResult, QuizQuestion, QuizScore } from "@gamenight/db-types";
 
-/** The public game, as every screen in the room sees it (broadcast whole on room:{id}; never a word). */
-export type LiveGame = { game: Game; players: GamePlayer[]; results: GameResult[] };
+/**
+ * The public game, as every screen in the room sees it (broadcast whole on room:{id}; never a word, and a quiz
+ * question's answer only once it's revealed). questions and scores are a quiz's; empty for Undercover.
+ */
+export type LiveGame = {
+  game: Game;
+  players: GamePlayer[];
+  results: GameResult[];
+  questions: QuizQuestion[];
+  scores: QuizScore[];
+};
 
 export type Role = "civilian" | "undercover" | "mr_white";
 
@@ -19,7 +28,7 @@ export type Reveal = {
 
 // One literal string, so the Supabase client can infer the row types from it.
 export const GAME_SELECT =
-  "id, room_id, kind, phase, step, round, settings, config, turn_order, turn_index, turn_deadline, phase_deadline, paused_at, paused_turn_left, paused_phase_left, vote_candidates, revoted, moves_in, resolved, guesser, judgement, winner, reveal, created_at, ended_at, game_players(game_id, member_id, room_id, seat, alive, eliminated_round, revealed_role), game_results(id, game_id, room_id, step, round, kind, votes, eliminated, revealed_role, tie, tied, verdict, overruled, created_at)";
+  "id, room_id, kind, phase, step, round, settings, config, turn_order, turn_index, turn_deadline, phase_deadline, paused_at, paused_turn_left, paused_phase_left, vote_candidates, revoted, moves_in, resolved, guesser, judgement, winner, reveal, created_at, ended_at, game_players(game_id, member_id, room_id, seat, alive, eliminated_round, revealed_role), game_results(id, game_id, room_id, step, round, kind, votes, eliminated, revealed_role, tie, tied, verdict, overruled, created_at), quiz_questions(game_id, room_id, number, round, step, kind, topic, for_member, difficulty, prompt, options, unit, image_path, image_credit, seconds, opened_at, answer, source_url, results, revealed_at), quiz_scores(game_id, room_id, member_id, points, correct, jokers, joker_on)";
 
 export const ROLE_LABEL: Record<Role, string> = { civilian: "a civilian", undercover: "undercover", mr_white: "Mr. White" };
 
@@ -30,6 +39,8 @@ export const PHASE_LABEL: Record<Game["phase"], string> = {
   vote: "Vote",
   guess: "Mr. White's guess",
   ended: "Game over",
+  question: "Question",
+  reveal: "The answer",
 };
 
 export const WINNER_LABEL: Record<string, string> = {
@@ -46,11 +57,18 @@ export const HOW_TO_PLAY: Record<Game["phase"], string> = {
   vote: "Vote for the player you think has a different word. The most-voted player is out and their role is shown.",
   guess: "Mr. White was caught, and gets one guess at the civilians' word. Guess right and Mr. White wins alone.",
   ended: "The civilians win when every undercover and Mr. White is out; the infiltrators win when one civilian is left.",
+  question: "Everyone answers the same question on their phone. A right answer scores 500 to 1,000 points: the faster, the more. Estimates score by how close you get.",
+  reveal: "The answer, how the room did, and the leaderboard. Going into the final round, whoever is last gets a double-points joker.",
 };
 
-export function fromRow(row: Game & { game_players: GamePlayer[]; game_results: GameResult[] }): LiveGame {
-  const { game_players, game_results, ...game } = row;
-  return { game, players: game_players, results: game_results };
+export function fromRow(row: Game & {
+  game_players: GamePlayer[];
+  game_results: GameResult[];
+  quiz_questions: QuizQuestion[];
+  quiz_scores: QuizScore[];
+}): LiveGame {
+  const { game_players, game_results, quiz_questions, quiz_scores, ...game } = row;
+  return { game, players: game_players, results: game_results, questions: quiz_questions, scores: quiz_scores };
 }
 
 export function judgementOf(game: Game): Judgement | null {

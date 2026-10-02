@@ -11,7 +11,7 @@ export default function Home() {
           <h1 className="text-4xl font-semibold leading-tight tracking-tight">
             The room on the TV. Everyone on their phones. An AI host running the games.
           </h1>
-          <p className="text-muted">Mafia, Undercover, Quiz Night and Heads Up, narrated out loud.</p>
+          <p className="text-muted">Undercover, Quiz Night and Heads Up, narrated out loud.</p>
         </header>
         <div className="flex flex-col gap-3">
           <ButtonLink href="/join">Join a game</ButtonLink>
