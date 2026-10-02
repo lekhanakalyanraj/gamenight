@@ -103,6 +103,9 @@ function applyGameChange(lobby: Lobby, change: Change): Lobby {
 const GAME_TABLES = new Set(["games", "game_players", "game_results", "quiz_questions", "quiz_scores", "headsup_turns"]);
 
 const MAX_CLIPS = 30;
+/** A game with no broadcast for this long is re-read; then every RECHECK_MS until broadcasts flow again. */
+const QUIET_MS = 8_000;
+const RECHECK_MS = 4_000;
 
 function applyChange(lobby: Lobby, change: Change): Lobby {
   if (GAME_TABLES.has(change.table)) return applyGameChange(lobby, change);
@@ -166,6 +169,20 @@ export function useLiveRoom(initial: Lobby, presence: Presence): LiveRoom {
     }));
   }, [roomId, supabase]);
 
+  // While a game runs, broadcasts arrive every few seconds. If none has for a while, the stream may have stalled
+  // (Realtime restarting, a network blip) with nothing arriving to reveal the gap: re-read, and keep re-reading every
+  // few seconds until broadcasts flow again, so no screen sits on an old question or turn.
+  const lastBroadcast = useRef(0);
+  useEffect(() => {
+    lastBroadcast.current = Date.now();
+    const timer = setInterval(() => {
+      const game = lobbyRef.current.game?.game;
+      if (!game || game.phase === "ended" || game.paused_at) return;
+      if (Date.now() - lastBroadcast.current > QUIET_MS) void refetch();
+    }, RECHECK_MS);
+    return () => clearInterval(timer);
+  }, [refetch]);
+
   // The tab coming back to the foreground: re-read (a gap in the broadcasts is caught where they arrive).
   useEffect(() => {
     const onVisible = () => {
@@ -185,6 +202,7 @@ export function useLiveRoom(initial: Lobby, presence: Presence): LiveRoom {
       const ch = supabase.channel(`room:${roomId}`, { config: { private: true, presence: { enabled: true } } });
       channel = ch;
       ch.on("broadcast", { event: "*" }, ({ payload }) => {
+          lastBroadcast.current = Date.now();
           const change = payload as Change;
           const gap = showsGap(lobbyRef.current, change);
           setLobby((current) => applyChange(current, change));

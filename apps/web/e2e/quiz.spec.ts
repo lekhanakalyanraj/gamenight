@@ -49,6 +49,22 @@ function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * A screen's text while a question is open, leaving out a reveal or round intro animating in beside it (as the
+ * question animates out, the reveal is already rendering: its answer is public by then). Early answers in what a
+ * screen receives are checked separately, on every Realtime message.
+ */
+async function openText(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    let text = document.body.innerText;  // as laid out (textContent would run neighbouring numbers together)
+    document.querySelectorAll<HTMLElement>('[data-testid="tv-reveal"], [data-testid="reveal"], [data-testid="round-intro"]')
+      .forEach((e) => {
+        text = text.replace(e.innerText, "");
+      });
+    return text;
+  });
+}
+
 /** Every quiz_questions row inside a Realtime message (they nest a few levels deep). */
 function questionRows(value: unknown, found: Record<string, unknown>[] = []): Record<string, unknown>[] {
   if (Array.isArray(value)) for (const v of value) questionRows(v, found);
@@ -137,23 +153,26 @@ test("a TV and five phones play a whole quiz, and no answer shows before its rev
   // Until the podium: the game ends the moment the last question is revealed, and its answer shows first.
   while (!(await tv.getByTestId("final-scores").isVisible())) {
     expect(Date.now(), "the quiz should finish").toBeLessThan(deadline);
-    const number = Number(await tv.getByTestId("quiz-tv").getAttribute("data-number"));
+    // Reads in this loop time out quickly: the screen may move on between looking and reading, which is fine.
+    const number = Number(await tv.getByTestId("quiz-tv").getAttribute("data-number", { timeout: 2_000 }).catch(() => 0));
     const tvReveal = tv.getByTestId("tv-reveal");
 
     if (await tvReveal.isVisible()) {
-      const answer = await tv.getByTestId("quiz-answer").getAttribute("data-answer");
+      const answer = await tv.getByTestId("quiz-answer").first().getAttribute("data-answer", { timeout: 2_000 })
+        .catch(() => null);
       if (answer && !answers.has(number)) answers.set(number, answer);
     } else if (await tv.getByTestId("tv-question").isVisible()) {
       // Before its reveal, nothing on any screen marks the right answer.
       const texts = seenBefore.get(number) ?? [];
-      texts.push(await tv.locator("body").innerText());
+      texts.push(await openText(tv));
       // (Within the question itself: as it animates out, the reveal is already rendering beside it.)
       expect(await tv.getByTestId("tv-question").locator("[data-correct]").count(), "the TV marked an answer before the reveal").toBe(0);
       if (await tv.getByTestId("quiz-picture").isVisible()) {
-        expect(await tv.getByTestId("quiz-picture").getAttribute("src")).toMatch(/^blob:/);
+        expect(await tv.getByTestId("quiz-picture").getAttribute("src", { timeout: 2_000 }).catch(() => "blob:")).toMatch(/^blob:/);
         pictureShown = true;
       }
-      kinds.set(number, (await tv.locator("header p").first().innerText()).split("·").pop()?.trim() ?? "");
+      const header = await tv.locator("header p").first().innerText({ timeout: 2_000 }).catch(() => "");
+      if (header) kinds.set(number, header.split("·").pop()?.trim() ?? "");
       seenBefore.set(number, texts);
     }
 
@@ -162,7 +181,7 @@ test("a TV and five phones play a whole quiz, and no answer shows before its rev
       if (!(await page.getByTestId("quiz-phone").isVisible())) continue;
       const question = page.getByTestId("question");
       if (!(await question.isVisible())) continue;
-      seenBefore.get(number)?.push(await page.locator("body").innerText());
+      seenBefore.get(number)?.push(await openText(page));
       expect(await question.locator("[data-correct]").count(), `${name}'s phone marked an answer before the reveal`).toBe(0);
 
       // The host pauses once mid-question; the TV says so until they resume.
