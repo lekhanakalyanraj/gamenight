@@ -110,3 +110,13 @@ async def ask(game: str, question: str, for_member: str | None, event: str) -> d
 
 async def reveal(game: str, event: str) -> dict[str, Any]:
     return await _call("select game_api.gm_reveal(%(game)s::uuid, %(event)s::uuid)", {"game": game, "event": event})
+
+
+# ---- Heads Up -----------------------------------------------------------------------------------------------------
+
+async def headsup_state(game: str) -> dict[str, Any]:
+    return await _call("select game_api.get_headsup_state(%(game)s::uuid)", {"game": game})
+
+
+async def next_turn(game: str, event: str) -> dict[str, Any]:
+    return await _call("select game_api.gm_next_turn(%(game)s::uuid, %(event)s::uuid)", {"game": game, "event": event})

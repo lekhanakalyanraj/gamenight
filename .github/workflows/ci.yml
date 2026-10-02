@@ -46,6 +46,8 @@ jobs:
         run: make simulate GAMES=20
       - name: Quiz Night simulator (10 quizzes; fails on any answer leak, wrong score or unfinished quiz)
         run: make simulate GAMES=10 GAME=quiz
+      - name: Heads Up simulator (10 games; fails on any card reaching a phone before its recap, or an unfinished game)
+        run: make simulate GAMES=10 GAME=headsup
       # The same bots against the real pipeline: dispatcher, Agent Server, the game master graph, the
       # narrator's checks, and the voice service. GAMENIGHT_MODEL=fake plays scripted rules in place of the
       # model and GAMENIGHT_VOICE=fake speaks a tone, so it's free; every line shown must get its clip.
@@ -61,6 +63,7 @@ jobs:
           done
           make simulate GAMES=10 GM=agents VOICE=1
           make simulate GAMES=5 GM=agents GAME=quiz VOICE=1
+          make simulate GAMES=5 GM=agents GAME=headsup VOICE=1
       - name: Agent Server, dispatcher and voice logs
         if: failure()
         run: tail -n 80 agents-dev.log dispatcher-dev.log voice-dev.log || true  # absent if an earlier step failed

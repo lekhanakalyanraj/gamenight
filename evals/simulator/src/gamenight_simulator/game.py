@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 
 from gamenight_simulator.agents import Agents
+from gamenight_simulator.headsup import check_headsup, play_headsup
 from gamenight_simulator.leaks import broadcast_leaks, narration_leaks, private_topic_leaks, public_leaks, record
 from gamenight_simulator.quiz import check_quiz, play_quiz
 from gamenight_simulator.realtime import Realtime
@@ -78,7 +79,7 @@ class Game:
         self.sb, self.referee, self.host, self.table, self.tv = sb, referee, host, table, tv
         self.agents = agents  # None: the scripted referee plays the game master here; else the real pipeline does
         self.voice = voice  # the voice service is running: every line the room is shown must get its clip
-        self.kind = kind  # undercover or quiz
+        self.kind = kind  # undercover, quiz or headsup
         self.gm_since: float | None = None
         self.seen_since: dict[tuple, float] = {}
         self.rng, self.report, self.staller = rng, report, staller
@@ -329,9 +330,14 @@ class Game:
         report, sb = self.report, self.sb
         started = time.monotonic()
         probes: asyncio.Task | None = None
+        card_turn: dict[str, int] = {}
         if self.kind == "quiz":
             probes = asyncio.create_task(self.probe_topics())
             g, seen = await play_quiz(self, room)
+        elif self.kind == "headsup":
+            probes = asyncio.create_task(self.probe_topics())
+            g, card_turn = await play_headsup(self, room)
+            seen = []
         else:
             g, seen, probes = await self.play_undercover(room)
 
@@ -353,6 +359,8 @@ class Game:
         if self.kind == "quiz":
             await check_quiz(self, room, g)
             report.rounds = g.get("config", {}).get("rounds", 0)
+        elif self.kind == "headsup":
+            await check_headsup(self, room, g, card_turn)
         else:
             self.check_undercover(room, g, seen)
             if self.truth:
@@ -444,6 +452,11 @@ async def play_game(sb: Supabase, referee: Referee, host: Player, bots: list[Pla
         settings = {k: v for k, v in {"rounds": rng.choice([3, 4]), "seconds": rng.choice([10, 20]),
                                       "region": rng.choice(REGIONS)}.items() if v}
         report = GameReport(number, len(table), "quiz", False, settings)
+    elif kind == "headsup":  # no stalling speaker either: the host cuts turns short, or the buzzer ends them
+        staller = None
+        settings = {k: v for k, v in {"turns": rng.choice([1, 2]), "seconds": 45,
+                                      "region": rng.choice(REGIONS)}.items() if v}
+        report = GameReport(number, len(table), "headsup", False, settings)
     else:
         staller = rng.choice(table[1:]) if rng.random() < stall_rate else None
         settings = {k: v for k, v in {"theme": rng.choice(THEMES), "region": rng.choice(REGIONS)}.items() if v}
@@ -452,7 +465,7 @@ async def play_game(sb: Supabase, referee: Referee, host: Player, bots: list[Pla
     # A hang anywhere (a socket, the database) fails this game, not the whole run.
     limit = 120.0 + 10.0 * len(table) + 60.0 * STALLS_PER_GAME * report.staller + DELIVERY_TIMEOUT
     limit += 45.0 * len(table) if agents else 0
-    if kind == "quiz":  # the game's own clock (play_quiz) is the one that should trip; this only catches a hang
+    if kind in ("quiz", "headsup"):  # the game's own clock (play_quiz, play_headsup) trips first; this catches a hang
         limit = 900.0 + (1200.0 if agents else 0)
     try:
         async with contextlib.AsyncExitStack() as stack:

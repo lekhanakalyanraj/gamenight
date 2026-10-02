@@ -1,6 +1,6 @@
 "use client";
 
-import type { Game, GameAction, GamePlayer, GameResult, QuizAnswer, QuizQuestion, QuizScore } from "@gamenight/db-types";
+import type { Game, GameAction, GamePlayer, GameResult, HeadsupTurn, QuizAnswer, QuizQuestion, QuizScore } from "@gamenight/db-types";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -63,7 +63,7 @@ function applyGameChange(lobby: Lobby, change: Change): Lobby {
     if (!current || current.game.id !== game.id) {
       // A game we haven't seen: its players and results come with the re-read (see showsGap).
       const newer = !current || game.created_at >= current.game.created_at;
-      return newer ? { ...lobby, game: { game, players: [], results: [], questions: [], scores: [] } } : lobby;
+      return newer ? { ...lobby, game: { game, players: [], results: [], questions: [], scores: [], turns: [] } } : lobby;
     }
     if (game.step < current.game.step) return lobby; // a late broadcast: never go backwards
     return { ...lobby, game: { ...current, game: { ...current.game, ...game } } };
@@ -83,6 +83,13 @@ function applyGameChange(lobby: Lobby, change: Change): Lobby {
       : [...current.questions, question];
     return { ...lobby, game: { ...current, questions } };
   }
+  if (change.table === "headsup_turns") {
+    const turn = row as HeadsupTurn;
+    const turns = current.turns.some((t) => t.number === turn.number)
+      ? current.turns.map((t) => (t.number === turn.number ? { ...t, ...turn } : t))
+      : [...current.turns, turn];
+    return { ...lobby, game: { ...current, turns } };
+  }
   if (change.table === "quiz_scores") {
     const score = row as QuizScore;
     const scores = current.scores.some((s) => s.member_id === score.member_id)
@@ -93,7 +100,7 @@ function applyGameChange(lobby: Lobby, change: Change): Lobby {
   return { ...lobby, game: { ...current, results: upsert(current.results, row as GameResult) } };
 }
 
-const GAME_TABLES = new Set(["games", "game_players", "game_results", "quiz_questions", "quiz_scores"]);
+const GAME_TABLES = new Set(["games", "game_players", "game_results", "quiz_questions", "quiz_scores", "headsup_turns"]);
 
 const MAX_CLIPS = 30;
 
@@ -211,9 +218,12 @@ export function useLiveRoom(initial: Lobby, presence: Presence): LiveRoom {
 }
 
 /** A TV's own private topic: the database tells it when it's been paired to a room or disconnected. */
+/** What a TV is sent during Heads Up: the card on screen (null between turns). Only TVs ever get it. */
+export type TvCard = { game_id: string; turn: number | null; card_no: number | null; card: string | null };
+
 export function useDisplayEvents(
   userId: string | null,
-  handlers: { onPaired?: (roomCode: string) => void; onUnpaired?: () => void },
+  handlers: { onPaired?: (roomCode: string) => void; onUnpaired?: () => void; onCard?: (card: TvCard) => void },
 ) {
   const handlersRef = useRef(handlers);
   const supabase = useSupabase();
@@ -233,6 +243,7 @@ export function useDisplayEvents(
         .channel(`display:${userId}`, { config: { private: true } })
         .on("broadcast", { event: "paired" }, ({ payload }) => handlersRef.current.onPaired?.(String(payload.room_code)))
         .on("broadcast", { event: "unpaired" }, () => handlersRef.current.onUnpaired?.())
+        .on("broadcast", { event: "headsup_card" }, ({ payload }) => handlersRef.current.onCard?.(payload as TvCard))
         .subscribe();
     }
 

@@ -8,12 +8,13 @@ import { useNow } from "@/lib/clock";
 import { AgeBadge, HostCaption, PlayerCount, PlayerTile, RoomEnded } from "@/components/lobby";
 import { Button, ButtonLink, Card, Field, Notice, Page } from "@/components/ui";
 import { VoiceSwitch } from "@/components/voice-switch";
+import { INTERESTS } from "@/lib/headsup";
 import { type Lobby, useLiveRoom } from "@/lib/realtime";
 import { activeMembers, latestHostLine, type LobbyDisplay, type LobbyMember } from "@/lib/room";
 import type { FormState } from "@/lib/validate";
 
 import { kickMember, leaveRoom, pairDisplay, removeDisplay } from "./actions";
-import { setTopic } from "./game-actions";
+import { setInterests, setTopic } from "./game-actions";
 import { HostChat } from "./host-chat";
 
 // The game screens animate with Motion, which sets inline styles; rendered only in the browser, those go
@@ -21,6 +22,10 @@ import { HostChat } from "./host-chat";
 const PhoneGame = dynamic(() => import("@/components/game/phone-game"), {
   ssr: false,
   loading: () => <p className="p-10 text-center text-muted">Loading the game…</p>,
+});
+const PhoneHeadsUp = dynamic(() => import("@/components/game/headsup-phone"), {
+  ssr: false,
+  loading: () => <p className="p-10 text-center text-muted">Loading Heads Up…</p>,
 });
 const PhoneQuiz = dynamic(() => import("@/components/game/quiz-phone"), {
   ssr: false,
@@ -62,7 +67,7 @@ export function PhoneLobby({ lobby, meId, isHost }: { lobby: Lobby; meId: string
   const showGame = game && (game.game.phase !== "ended"
     || (leftReveal !== game.game.id && Date.parse(game.game.ended_at ?? "") > now - REVEAL_MINUTES * 60_000));
   if (game && showGame) {
-    const Screen = game.game.kind === "quiz" ? PhoneQuiz : PhoneGame;
+    const Screen = game.game.kind === "quiz" ? PhoneQuiz : game.game.kind === "heads_up" ? PhoneHeadsUp : PhoneGame;
     return <Screen live={{ ...live, game }} meId={meId} isHost={isHost} onBackToLobby={() => setLeftReveal(game.game.id)} />;
   }
 
@@ -105,7 +110,12 @@ export function PhoneLobby({ lobby, meId, isHost }: { lobby: Lobby; meId: string
 
       <TopicPicker roomId={live.room.id} topic={me?.topic ?? null} />
 
-      {isHost ? <StartGame roomId={live.room.id} players={players.length} topics={players.filter((m) => m.topic).length} /> : null}
+      <InterestsPicker roomId={live.room.id} interests={me?.interests ?? []} />
+
+      {isHost ? (
+        <StartGame roomId={live.room.id} players={players.length} topics={players.filter((m) => m.topic).length}
+                   interests={players.filter((m) => m.interests?.length).length} />
+      ) : null}
 
       <p className="text-center text-sm text-muted">
         {isHost ? null : "Waiting for the host to start."}
@@ -258,6 +268,48 @@ function TopicPicker({ roomId, topic }: { roomId: string; topic: string | null }
                placeholder="Or type your own" autoComplete="off"
                className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 outline-none focus:border-accent" />
         <Button type="submit" variant="secondary" disabled={pending || !text.trim()}>Pick</Button>
+      </form>
+      <Notice>{error}</Notice>
+    </Card>
+  );
+}
+
+/** Your Heads Up interests, up to three: the deck leans toward them. */
+function InterestsPicker({ roomId, interests }: { roomId: string; interests: string[] }) {
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string>();
+  const [pending, startTransition] = useTransition();
+  const has = (i: string) => interests.some((x) => x.toLowerCase() === i.toLowerCase());
+  const save = (next: string[]) => startTransition(async () => {
+    const result = await setInterests(roomId, next);
+    setError(result.error);
+    if (!result.error) setText("");
+  });
+  const toggle = (i: string) => save(has(i) ? interests.filter((x) => x.toLowerCase() !== i.toLowerCase()) : [...interests, i]);
+  const full = interests.length >= 3;
+
+  return (
+    <Card>
+      <h2 className="mb-1 text-lg font-medium">Your Heads Up interests</h2>
+      <p className="mb-3 text-sm text-muted">
+        {interests.length
+          ? <>You picked <span data-testid="my-interests" className="text-foreground">{interests.join(", ")}</span>{full ? "." : ". Pick up to three."}</>
+          : "Pick up to three: the cards will lean toward them."}
+      </p>
+      <div role="group" aria-label="Heads Up interests" className="mb-3 flex flex-wrap gap-2">
+        {INTERESTS.map((i) => (
+          <button key={i} type="button" aria-pressed={has(i)} disabled={pending || (full && !has(i))}
+                  onClick={() => toggle(i)}
+                  className={`h-9 rounded-full border px-3 text-sm transition disabled:opacity-40 ${has(i) ? "border-accent bg-accent text-accent-ink" : "border-border bg-surface-2"}`}>
+            {i}
+          </button>
+        ))}
+      </div>
+      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (text.trim() && !full) save([...interests, text]); }}>
+        <input aria-label="Your own interest" value={text} maxLength={30} onChange={(e) => setText(e.target.value)}
+               placeholder={full ? "Three picked" : "Or type your own"} autoComplete="off" disabled={full}
+               className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 outline-none focus:border-accent disabled:opacity-50" />
+        <Button type="submit" variant="secondary" disabled={pending || full || !text.trim()}>Add</Button>
       </form>
       <Notice>{error}</Notice>
     </Card>

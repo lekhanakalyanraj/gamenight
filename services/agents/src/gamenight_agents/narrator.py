@@ -28,6 +28,9 @@ STOCK = {
     "guess": "Mr. White, this is your moment.",
     "question": "Phones ready. The clock is ticking!",
     "reveal": "The answer's in. Let's see who got it!",
+    "ready": "Guesser, turn your back to the TV!",
+    "guessing": "Clues, clues, clues! Keep them coming!",
+    "recap": "Time! What a turn!",
     "ended": "And that's the game! What a night.",
 }
 

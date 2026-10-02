@@ -1,8 +1,9 @@
-import type { Game, GamePlayer, GameResult, QuizQuestion, QuizScore } from "@gamenight/db-types";
+import type { Game, GamePlayer, GameResult, HeadsupTurn, QuizQuestion, QuizScore } from "@gamenight/db-types";
 
 /**
  * The public game, as every screen in the room sees it (broadcast whole on room:{id}; never a word, and a quiz
- * question's answer only once it's revealed). questions and scores are a quiz's; empty for Undercover.
+ * question's answer only once it's revealed). questions and scores are a quiz's, turns are Heads Up's; empty for the
+ * other games. A Heads Up card is never here: it goes only to the room's TVs.
  */
 export type LiveGame = {
   game: Game;
@@ -10,6 +11,7 @@ export type LiveGame = {
   results: GameResult[];
   questions: QuizQuestion[];
   scores: QuizScore[];
+  turns: HeadsupTurn[];
 };
 
 export type Role = "civilian" | "undercover" | "mr_white";
@@ -28,7 +30,7 @@ export type Reveal = {
 
 // One literal string, so the Supabase client can infer the row types from it.
 export const GAME_SELECT =
-  "id, room_id, kind, phase, step, round, settings, config, turn_order, turn_index, turn_deadline, phase_deadline, paused_at, paused_turn_left, paused_phase_left, vote_candidates, revoted, moves_in, resolved, guesser, judgement, winner, reveal, created_at, ended_at, game_players(game_id, member_id, room_id, seat, alive, eliminated_round, revealed_role), game_results(id, game_id, room_id, step, round, kind, votes, eliminated, revealed_role, tie, tied, verdict, overruled, created_at), quiz_questions(game_id, room_id, number, round, step, kind, topic, for_member, difficulty, prompt, options, unit, image_path, image_credit, seconds, opened_at, answer, source_url, results, revealed_at), quiz_scores(game_id, room_id, member_id, points, correct, jokers, joker_on)";
+  "id, room_id, kind, phase, step, round, settings, config, turn_order, turn_index, turn_deadline, phase_deadline, paused_at, paused_turn_left, paused_phase_left, vote_candidates, revoted, moves_in, resolved, guesser, judgement, winner, reveal, created_at, ended_at, game_players(game_id, member_id, room_id, seat, alive, eliminated_round, revealed_role), game_results(id, game_id, room_id, step, round, kind, votes, eliminated, revealed_role, tie, tied, verdict, overruled, created_at), quiz_questions(game_id, room_id, number, round, step, kind, topic, for_member, difficulty, prompt, options, unit, image_path, image_credit, seconds, opened_at, answer, source_url, results, revealed_at), quiz_scores(game_id, room_id, member_id, points, correct, jokers, joker_on), headsup_turns(game_id, room_id, number, round, member_id, step, started_at, ends_at, ended_at, shown, got, passed, cards)";
 
 export const ROLE_LABEL: Record<Role, string> = { civilian: "a civilian", undercover: "undercover", mr_white: "Mr. White" };
 
@@ -41,6 +43,9 @@ export const PHASE_LABEL: Record<Game["phase"], string> = {
   ended: "Game over",
   question: "Question",
   reveal: "The answer",
+  ready: "Get ready",
+  guessing: "Guess!",
+  recap: "Time!",
 };
 
 export const WINNER_LABEL: Record<string, string> = {
@@ -59,6 +64,9 @@ export const HOW_TO_PLAY: Record<Game["phase"], string> = {
   ended: "The civilians win when every undercover and Mr. White is out; the infiltrators win when one civilian is left.",
   question: "Everyone answers the same question on their phone. A right answer scores 500 to 1,000 points: the faster, the more. Estimates score by how close you get.",
   reveal: "The answer, how the room did, and the leaderboard. Going into the final round, whoever is last gets a double-points joker.",
+  ready: "The guesser turns their back to the TV. Everyone else: get ready to give clues, without saying the word.",
+  guessing: "The word is on the TV. Shout clues (no saying it, no spelling it); the guesser taps Got it or Pass.",
+  recap: "That turn's words and score. The next guesser is up soon.",
 };
 
 export function fromRow(row: Game & {
@@ -66,9 +74,10 @@ export function fromRow(row: Game & {
   game_results: GameResult[];
   quiz_questions: QuizQuestion[];
   quiz_scores: QuizScore[];
+  headsup_turns: HeadsupTurn[];
 }): LiveGame {
-  const { game_players, game_results, quiz_questions, quiz_scores, ...game } = row;
-  return { game, players: game_players, results: game_results, questions: quiz_questions, scores: quiz_scores };
+  const { game_players, game_results, quiz_questions, quiz_scores, headsup_turns, ...game } = row;
+  return { game, players: game_players, results: game_results, questions: quiz_questions, scores: quiz_scores, turns: headsup_turns };
 }
 
 export function judgementOf(game: Game): Judgement | null {

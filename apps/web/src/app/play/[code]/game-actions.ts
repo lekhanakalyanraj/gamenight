@@ -1,6 +1,6 @@
 "use server";
 
-import type { GameAction, QuizAnswer } from "@gamenight/db-types";
+import type { GameAction, HeadsupTurn, QuizAnswer } from "@gamenight/db-types";
 
 import { friendlyError } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/server";
@@ -14,7 +14,8 @@ const REGIONS = new Set(["IN", "GB", "US"]);
 
 export type GameSetup =
   | { kind: "undercover"; theme: string | null; region: string | null }
-  | { kind: "quiz"; rounds: number; seconds: number; region: string | null };
+  | { kind: "quiz"; rounds: number; seconds: number; region: string | null }
+  | { kind: "heads_up"; turns: number; seconds: number; region: string | null };
 
 export async function startGame(roomId: string, setup: GameSetup): Promise<{ error?: string }> {
   if (!isUuid(roomId)) return BAD;
@@ -26,6 +27,10 @@ export async function startGame(roomId: string, setup: GameSetup): Promise<{ err
   } else if (setup.kind === "quiz") {
     if (![3, 4, 5].includes(setup.rounds) || ![10, 20, 30].includes(setup.seconds)) return BAD;
     settings.rounds = setup.rounds;
+    settings.seconds = setup.seconds;
+  } else if (setup.kind === "heads_up") {
+    if (![1, 2].includes(setup.turns) || ![45, 60, 90].includes(setup.seconds)) return BAD;
+    settings.turns = setup.turns;
     settings.seconds = setup.seconds;
   } else {
     return BAD;
@@ -135,5 +140,32 @@ export async function settleVerdict(gameId: string, overrule: boolean): Promise<
   if (!isUuid(gameId)) return BAD;
   const supabase = await createClient();
   const { error } = await supabase.rpc("settle_judgement", { p_game_id: gameId, p_overrule: overrule });
+  return error ? { error: friendlyError(error) } : {};
+}
+
+/**
+ * Heads Up: the guesser (or the host for them) says Got it or Pass for the card on screen. cardNo is the card's place
+ * in the turn, so a late tap can't answer the next card; the phone makes the action id, so a retry counts once.
+ */
+export async function headsupMove(
+  gameId: string,
+  result: "got" | "pass",
+  cardNo: number,
+  actionId: string,
+): Promise<{ turn?: HeadsupTurn; error?: string }> {
+  if (!isUuid(gameId) || !isUuid(actionId) || !["got", "pass"].includes(result) || !Number.isInteger(cardNo)) return BAD;
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("headsup_move", {
+    p_game_id: gameId, p_result: result, p_card_no: cardNo, p_action_id: actionId,
+  });
+  return error ? { error: friendlyError(error) } : { turn: data ?? undefined };
+}
+
+/** Your Heads Up interests, up to three, picked in the lobby (the database checks each). */
+export async function setInterests(roomId: string, interests: string[]): Promise<{ error?: string }> {
+  if (!isUuid(roomId) || !Array.isArray(interests) || interests.some((i) => typeof i !== "string")) return BAD;
+  const clean = interests.map((i) => i.trim().replace(/\s+/g, " ").slice(0, 30)).filter(Boolean).slice(0, 3);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_interests", { p_room_id: roomId, p_interests: clean });
   return error ? { error: friendlyError(error) } : {};
 }
