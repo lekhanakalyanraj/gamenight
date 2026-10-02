@@ -3,7 +3,7 @@
 The dispatcher relays a game's events here. Each run reads the game in code first; if every event is stale
 (the game has moved past its step), it stops without a model call. Otherwise an AI runs the game: the quiz
 master for a quiz (gamenight_agents.quiz_master), the game master for Undercover (gamenight_agents.game_master).
-Heads Up is run by scripted rules for now (headsup_rules); its AI commentator comes in slice 6b.
+Heads Up's moves are always code (headsup_rules); the AI commentator (headsup_commentator) writes its lines.
 Scripted rules play instead (quiz_rules, game_rules) with GAMENIGHT_MODEL=fake, or once the game has used its
 model budget. Host chat never runs here, and nothing here streams to a phone.
 """
@@ -17,7 +17,7 @@ from typing import Annotated, Any, TypedDict
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 
-from gamenight_agents import game_master, game_rules, games, headsup_rules, quiz_master, quiz_rules
+from gamenight_agents import game_master, game_rules, games, headsup_commentator, headsup_rules, quiz_master, quiz_rules
 from gamenight_agents.settings import model_provider
 from gamenight_agents.telemetry import GenAITracer, run_span
 from gamenight_agents.turn import Turn, current
@@ -60,7 +60,7 @@ async def run_game_master(state: GameState, config: RunnableConfig) -> dict:
             if game["kind"] == "quiz":
                 await (quiz_rules.play(turn) if scripted else quiz_master.play(turn, config))
             elif game["kind"] == "heads_up":
-                await headsup_rules.play(turn)  # the AI commentator arrives in 6b
+                await headsup_rules.play(turn, None if scripted else headsup_commentator.speak)
             elif scripted:
                 await game_rules.play(turn)
             else:

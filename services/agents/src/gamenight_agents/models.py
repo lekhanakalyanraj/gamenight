@@ -78,5 +78,6 @@ def content_model(max_tokens: int = 600) -> BaseChatModel:
     return _anthropic(GAME_MASTER_MODEL, max_tokens=max_tokens, temperature=0.9)
 
 
-def reviewer_model() -> BaseChatModel:
-    return _anthropic(GAME_MASTER_MODEL, max_tokens=200, temperature=0)
+def reviewer_model(max_tokens: int = 200) -> BaseChatModel:
+    """One verdict needs a couple of hundred tokens; a batch of verdicts (a Heads Up deck's review) needs more."""
+    return _anthropic(GAME_MASTER_MODEL, max_tokens=max_tokens, temperature=0)

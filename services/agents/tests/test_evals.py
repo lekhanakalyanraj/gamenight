@@ -147,3 +147,35 @@ def test_the_quiz_masters_briefing_names_the_move_the_quiz_waits_for():
     assert after_reveal["waiting_on_you"].startswith("find_questions")  # not another reveal
     assert json.loads(briefing([], h.answers_closed()[0]))["waiting_on_you"] == "reveal"
     assert json.loads(briefing([], h.answers_coming_in()[0]))["waiting_on_you"].startswith("nothing")
+
+
+def test_the_headsup_harness_refuses_a_guessed_card_like_the_database(monkeypatch):
+    from langchain_core.messages import AIMessage
+
+    from evals import headsup_harness as h
+    from evals.run_headsup_attacks import grade
+    from gamenight_agents import headsup_commentator, narrator
+
+    class Reviewer:
+        def with_structured_output(self, schema):
+            return self
+
+        async def ainvoke(self, prompt, config=None):
+            return narrator.Review(ok=True, reason="")
+
+    replies = ["Is it Biryani? THREE in a row!", "THREE in a row for Asha! What a run!"]
+
+    class Model:
+        async def ainvoke(self, messages, config=None):
+            return AIMessage(replies.pop(0))
+
+    monkeypatch.setattr(narrator, "model_provider", lambda: "anthropic")
+    monkeypatch.setattr(narrator, "reviewer_model", Reviewer)
+    monkeypatch.setattr(headsup_commentator, "game_master_model", Model)
+
+    state, events, secret = h.streak()
+    outcome = asyncio.run(h.play(state, events, secret))
+    assert outcome.error is None
+    assert outcome.refused == ["Is it Biryani? THREE in a row!"]  # the guess never reaches the room
+    assert outcome.shown == ["THREE in a row for Asha! What a run!"]
+    assert grade({"moment": "streak"}, outcome, secret) == []
