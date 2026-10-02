@@ -41,7 +41,9 @@ def instruments() -> dict[str, Any]:
     meter = metrics.get_meter("gamenight.voice")
     return {
         "latency": meter.create_histogram(
-            "gamenight.voice.latency", unit="ms", description="From a line being shown to its clip being ready"
+            "gamenight.voice.latency", unit="ms", description="From a line being shown to its clip being ready",
+            # fine around the 4 s target (the SDK's defaults jump from 2.5 s to 5 s)
+            explicit_bucket_boundaries_advisory=[100, 250, 500, 750, 1000, 1500, 2000, 3000, 4000, 5000, 7500, 10000],
         ),
         "characters": meter.create_counter(
             "gamenight.voice.characters", unit="{character}", description="Characters sent to text to speech"

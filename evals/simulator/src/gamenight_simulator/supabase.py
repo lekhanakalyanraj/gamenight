@@ -1,5 +1,6 @@
 """Just enough of Supabase's HTTP API for a bot: sign in, call RPCs and read tables, as that user."""
 
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -22,11 +23,16 @@ class Session:
     expires_at: float
 
 
+# A player's moves: the phone updates its own screen from the reply, so this round trip is "tap -> own screen".
+MOVES = {"submit_action", "answer_question", "play_joker", "headsup_move"}
+
+
 class Supabase:
     def __init__(self, url: str, key: str):
         self.url, self.key = url, key
         self.traceparent: str | None = None  # sent with every call, so one game is one trace (see game.py)
         self.http = httpx.AsyncClient(base_url=url, headers={"apikey": key}, timeout=15.0)
+        self.move_ms: list[float] = []  # each player move's round trip (what a tap costs before the screen updates)
 
     async def close(self) -> None:
         await self.http.aclose()
@@ -57,7 +63,10 @@ class Supabase:
         return headers
 
     async def rpc(self, session: Session, fn: str, **args: Any) -> Any:
+        started = time.perf_counter()
         response = await self.http.post(f"/rest/v1/rpc/{fn}", json=args, headers=self._auth(session))
+        if fn in MOVES and response.status_code < 400:
+            self.move_ms.append((time.perf_counter() - started) * 1000)
         if response.status_code >= 400:
             body = response.json()
             raise RpcError(body.get("code") or str(response.status_code), body.get("message") or response.text)

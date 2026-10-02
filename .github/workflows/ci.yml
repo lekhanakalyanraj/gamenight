@@ -64,6 +64,8 @@ jobs:
           make simulate GAMES=10 GM=agents VOICE=1
           make simulate GAMES=5 GM=agents GAME=quiz VOICE=1
           make simulate GAMES=5 GM=agents GAME=headsup VOICE=1
+          make load ROOMS=3 GAMES_LOAD=3 VOICE=1  # a small load test: three rooms at once, mixed games
+          cat load-report.md >> "$GITHUB_STEP_SUMMARY"
       - name: Agent Server, dispatcher and voice logs
         if: failure()
         run: tail -n 80 agents-dev.log dispatcher-dev.log voice-dev.log || true  # absent if an earlier step failed

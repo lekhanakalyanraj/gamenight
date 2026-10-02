@@ -6,7 +6,7 @@ import os
 import signal
 
 from gamenight_dispatcher.agents import AgentServer
-from gamenight_dispatcher.dispatcher import fire_deadlines, run
+from gamenight_dispatcher.dispatcher import fire_deadlines, run, watch_ops
 from gamenight_dispatcher.health import serve_health
 
 
@@ -21,7 +21,8 @@ async def main() -> None:
     token = os.environ["AGENTS_SERVICE_TOKEN"]
     agents = AgentServer(os.environ["AGENTS_URL"], headers={"x-gamenight-service-token": token})
     database_url = os.environ["DATABASE_URL"]
-    await asyncio.gather(run(database_url, agents, stop), fire_deadlines(database_url, stop))
+    await asyncio.gather(run(database_url, agents, stop), fire_deadlines(database_url, stop),
+                         watch_ops(database_url, stop))
 
 
 if __name__ == "__main__":

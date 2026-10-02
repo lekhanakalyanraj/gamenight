@@ -47,7 +47,7 @@ async def lobby(state: RoomState, config: RunnableConfig) -> dict:
             snapshot = await db.room_snapshot(room_id) or {}
             if snapshot.get("status") == "lobby":
                 rating = snapshot.get("age_rating", "family")
-                line = await welcome_line(host_model(), names, rating, callbacks=[GenAITracer()])
+                line = await welcome_line(host_model(), names, rating, callbacks=[GenAITracer(game="lobby")])
                 # The batch's first event id makes the line idempotent: a retried run can't post it twice.
                 await db.host_say(room_id, line, "welcome", event_id=events[0]["id"])
         # Players picking quiz topics: top up the question bank for them now, so the quiz never waits at the start.
@@ -57,7 +57,7 @@ async def lobby(state: RoomState, config: RunnableConfig) -> dict:
             if snapshot.get("status") == "lobby":
                 for topic in topics:
                     result = await quiz_content.top_up(room_id, topic, snapshot.get("age_rating", "family"),
-                                                       callbacks=[GenAITracer()])
+                                                       callbacks=[GenAITracer(game="lobby")])
                     log.info("quiz bank for %r: %s", topic, result)
         # Players picking Heads Up interests: build cards for them now, so the deck leans their way at the start.
         interests = picked_interests(events)
@@ -66,7 +66,7 @@ async def lobby(state: RoomState, config: RunnableConfig) -> dict:
             if snapshot.get("status") == "lobby":
                 for interest in interests:
                     result = await headsup_content.top_up(room_id, interest, snapshot.get("age_rating", "family"),
-                                                          callbacks=[GenAITracer()])
+                                                          callbacks=[GenAITracer(game="lobby")])
                     log.info("Heads Up cards for %r: %s", interest, result)
     return {"events": None, "kind": None}
 
@@ -100,7 +100,7 @@ async def host_chat(state: RoomState, config: RunnableConfig) -> dict:
     history = state.get("messages") or []
     room_id = (config.get("configurable") or {}).get("thread_id")
     with run_span("agents.host_chat", config, room_id=room_id):
-        traced = merge_configs(config, {"callbacks": [GenAITracer()]})
+        traced = merge_configs(config, {"callbacks": [GenAITracer(game="chat")]})
         result = await host_agent().ainvoke({"messages": history}, traced)
     return {"messages": result["messages"][len(history):]}
 

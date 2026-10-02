@@ -25,3 +25,4 @@ services/agents/*-results.json
 infra/helm/gamenight/charts/*/charts/
 infra/helm/gamenight/charts/*/Chart.lock
 .helm-rendered.yaml
+load-report*

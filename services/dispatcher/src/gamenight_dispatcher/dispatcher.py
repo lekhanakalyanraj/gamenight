@@ -18,7 +18,7 @@ from gamenight_dispatcher.outbox import (
     group_by_thread,
     origin_traceparent,
 )
-from gamenight_dispatcher.telemetry import instruments, parent_context, tracer
+from gamenight_dispatcher.telemetry import OPS, instruments, ops_gauges, parent_context, tracer
 
 log = logging.getLogger("gamenight.dispatcher")
 
@@ -93,5 +93,22 @@ async def fire_deadlines(database_url: str, stop: asyncio.Event, every: float = 
                         await asyncio.wait_for(stop.wait(), every)
         except psycopg.Error as error:
             log.error("firing deadlines failed, will retry: %s", error)
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), every)
+
+
+async def watch_ops(database_url: str, stop: asyncio.Event, every: float = 15.0) -> None:
+    """Every 15 s, the counts the dashboards show (rooms open, players, games running), as gauges. Its own loop and
+    connection: a slow count never holds up dispatching."""
+    ops_gauges()
+    while not stop.is_set():
+        try:
+            async with await psycopg.AsyncConnection.connect(database_url, autocommit=True) as conn:
+                while not stop.is_set():
+                    OPS.update((await (await conn.execute("select dispatch.ops_stats()")).fetchone())[0])
+                    with contextlib.suppress(TimeoutError):
+                        await asyncio.wait_for(stop.wait(), every)
+        except psycopg.Error as error:
+            log.error("reading the ops numbers failed, will retry: %s", error)
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), every)

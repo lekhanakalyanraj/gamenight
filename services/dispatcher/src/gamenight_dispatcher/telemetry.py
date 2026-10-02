@@ -52,6 +52,34 @@ def instruments() -> dict[str, Any]:
     }
 
 
+# The latest operations numbers (dispatch.ops_stats), refreshed every 15 s and read by the gauges when metrics are
+# exported. Counts only: rooms open, players in them, games running by kind.
+OPS: dict[str, Any] = {}
+
+
+def _observe(key: str):
+    from opentelemetry.metrics import Observation
+
+    def callback(_options):
+        value = OPS.get(key)
+        if isinstance(value, dict):
+            return [Observation(n, {"gamenight.game.kind": kind}) for kind, n in value.items()]
+        return [Observation(value)] if value is not None else []
+    return callback
+
+
+@cache
+def ops_gauges() -> None:
+    setup()
+    meter = metrics.get_meter("gamenight.dispatcher")
+    meter.create_observable_gauge("gamenight.rooms.open", [_observe("rooms_open")], unit="{room}",
+                                  description="Rooms not closed")
+    meter.create_observable_gauge("gamenight.rooms.players", [_observe("players_in_rooms")], unit="{player}",
+                                  description="Players in open rooms")
+    meter.create_observable_gauge("gamenight.games.running", [_observe("games_running")], unit="{game}",
+                                  description="Games not ended, by kind")
+
+
 def parent_context(traceparent: str | None):
     return propagate.extract({"traceparent": traceparent}) if traceparent else None
 

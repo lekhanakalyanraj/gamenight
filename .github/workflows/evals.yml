@@ -166,6 +166,10 @@ jobs:
         if: failure() && needs.plan.outputs.state == 'run'
         run: tail -n 80 agents-dev.log dispatcher-dev.log
 
+      - name: The eval report (every suite in one table)
+        if: always() && needs.plan.outputs.state == 'run'
+        run: python3 scripts/eval-report.py services/agents >> "$GITHUB_STEP_SUMMARY"
+
       - name: Keep the results
         if: always() && needs.plan.outputs.state == 'run'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

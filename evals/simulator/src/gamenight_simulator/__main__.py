@@ -26,6 +26,7 @@ import psycopg
 
 from gamenight_simulator.agents import STATS, Agents
 from gamenight_simulator.game import Player, play_game
+from gamenight_simulator.load import markdown, passed, run_load
 from gamenight_simulator.referee import Referee
 from gamenight_simulator.supabase import Supabase
 
@@ -54,6 +55,37 @@ async def run(args: argparse.Namespace) -> int:
     if args.game_master == "agents":
         agents = Agents(os.environ.get("AGENTS_URL", "http://127.0.0.1:2024"),
                         os.environ.get("AGENTS_SERVICE_TOKEN", "local-dev-agents-token"))
+
+    if args.load:  # many rooms at once: each its own host, TV and bots (see load.py)
+        ticker = asyncio.create_task(tick_deadlines(dispatcher_url))
+
+        def say(room: int, report) -> None:
+            status = "skip" if report.inconclusive and not report.leaks and not report.errors else (
+                "ok  " if report.completed and not report.leaks else "FAIL")
+            print(f"{status} room {room:>2} game {report.number:>3}: {report.players:>2} players, {report.policy}, "
+                  f"{report.seconds} s", flush=True)
+            for problem in report.leaks + report.errors:
+                print(f"       {problem}", flush=True)
+
+        try:
+            summary, load = await run_load(args, url, key, gm_url, NAMES, agents, say)
+        finally:
+            ticker.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await ticker
+            await sb.close()
+            if agents:
+                await agents.close()
+        print(json.dumps(summary, indent=2))
+        report_md = markdown(summary, args.strict)
+        if args.report:
+            with open(args.report, "w") as out:
+                json.dump({"summary": summary, "games": [dataclasses.asdict(r) for r in load.reports]}, out, indent=2)
+        if args.report_md:
+            with open(args.report_md, "w") as out:
+                out.write(report_md)
+        print(report_md)
+        return 0 if passed(summary, args.strict) else 1
 
     # One host account (fresh each run, with a throwaway password) and one pool of guests and a TV, reused
     # across games to stay well inside the local stack's sign-up rate limits.
@@ -146,8 +178,12 @@ def main() -> None:
     parser.add_argument("--max-players", type=int, default=10)
     parser.add_argument("--stall-rate", type=float, default=0.1, help="share of games with a player who stalls")
     parser.add_argument("--report", help="write a JSON report here")
-    parser.add_argument("--game", choices=["undercover", "quiz", "headsup"], default="undercover",
-                        help="which game the bots play")
+    parser.add_argument("--game", choices=["undercover", "quiz", "headsup", "mixed"], default="undercover",
+                        help="which game the bots play (mixed: any of the three, each game; with --load)")
+    parser.add_argument("--load", type=int, default=0,
+                        help="rooms playing at once, each with its own host, TV and bots (a load test; see load.py)")
+    parser.add_argument("--strict", action="store_true", help="with --load: fail when a latency target is missed")
+    parser.add_argument("--report-md", help="with --load: write the Markdown report here")
     parser.add_argument("--voice", action="store_true",
                         help="the voice service is running: fail a game when a line it showed never got its clip")
     parser.add_argument("--game-master", choices=["referee", "agents"], default="referee",
@@ -155,6 +191,8 @@ def main() -> None:
     args = parser.parse_args()
     if not 3 <= args.min_players <= args.max_players <= len(NAMES) + 1:
         parser.error(f"players must be between 3 and {len(NAMES) + 1}")
+    if args.game == "mixed" and not args.load:
+        parser.error("--game mixed is for load tests (--load N)")
     sys.exit(asyncio.run(run(args)))
 
 
