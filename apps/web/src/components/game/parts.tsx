@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { type Card, ROLE_LABEL } from "@/lib/game";
@@ -122,19 +122,19 @@ export function HoldCard({ card }: { card: Card | null }) {
 
 /** A big phase title that swaps with a slide, so every screen changes phase with a beat. */
 export function PhaseTitle({ id, children, className = "" }: { id: string; children: ReactNode; className?: string }) {
+  // Each phase animates in, and the last one goes at once: no exit animation. With an exit and mode="wait", a key
+  // that changed again mid-exit (the quiz reveals its last question and ends in the same moment) could leave the
+  // old phase on screen for good.
   return (
-    <AnimatePresence mode="wait" initial={false}>
-      <motion.div
-        key={id}
-        initial={{ opacity: 0, y: 24, filter: "blur(6px)" }}
-        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-        exit={{ opacity: 0, y: -16, filter: "blur(6px)" }}
-        transition={{ duration: 0.35 }}
-        className={className}
-      >
-        {children}
-      </motion.div>
-    </AnimatePresence>
+    <motion.div
+      key={id}
+      initial={{ opacity: 0, y: 24, filter: "blur(6px)" }}
+      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+      transition={{ duration: 0.35 }}
+      className={className}
+    >
+      {children}
+    </motion.div>
   );
 }
 

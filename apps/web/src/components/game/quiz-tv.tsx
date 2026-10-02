@@ -48,6 +48,9 @@ export default function TvQuiz({ live }: { live: LiveRoom & { game: LiveGame } }
   const playing = players.filter((p) => inRoom.has(p.member_id)).length;
   const lastReveal = showingFinalReveal(game, question, now);
   const ended = game.phase === "ended" && !lastReveal;
+  const intro = !question || (game.phase === "reveal" && !game.phase_deadline && nextIsNewRound(game, asked));
+  // The stage's key is what it shows, so the game ending under the last reveal doesn't replay it.
+  const view = ended ? "ended" : intro ? "intro" : question?.revealed_at ? "reveal" : "question";
 
   return (
     <MotionConfig reducedMotion="user">
@@ -70,11 +73,11 @@ export default function TvQuiz({ live }: { live: LiveRoom & { game: LiveGame } }
             {game.paused_at ? (
               <Big title="Paused by the host">The quiz will pick up where it left off.</Big>
             ) : (
-              <PhaseTitle id={`${ended ? "ended" : "playing"}-${question?.number ?? 0}-${Boolean(question?.revealed_at)}-${game.phase_deadline === null}`}
+              <PhaseTitle id={`${view}-${question?.number ?? 0}`}
                           className="flex w-full flex-col">
                 {ended ? (
                   <FinalScores gameId={game.id} live={live.game} names={names} />
-                ) : !question || (game.phase === "reveal" && !game.phase_deadline && nextIsNewRound(game, asked)) ? (
+                ) : intro ? (
                   <RoundIntro {...nextRound(game, asked)} />
                 ) : !question.revealed_at ? (
                   <QuestionStage question={question} names={names} open={open} answered={game.moves_in} playing={playing} />

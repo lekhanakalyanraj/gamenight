@@ -1,7 +1,7 @@
 "use client";
 
 import type { HeadsupTurn } from "@gamenight/db-types";
-import { AnimatePresence, motion, MotionConfig } from "motion/react";
+import { motion, MotionConfig } from "motion/react";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { Avatar, PhaseTitle, TimerRing } from "@/components/game/parts";
@@ -108,17 +108,14 @@ function Guessing({ turn, card, guesser }: { turn: HeadsupTurn; card: string | n
       {/* The live card, stated once on a steady element (the animated one below swaps with the next). */}
       <div data-testid="tv-live" data-card={card ?? ""} data-card-no={turn.shown}
            className="grid min-h-[38vh] w-full place-items-center rounded-3xl bg-surface-2 px-10">
-        {/* "wait": the old card leaves, then the new one comes in. ("popLayout" injects a <style> element, which the
-            strict style CSP blocks.) */}
-        <AnimatePresence mode="wait">
-          <motion.p key={`${turn.number}-${turn.shown}`} data-testid="tv-card"
-                    initial={{ y: 60, opacity: 0, rotate: -3 }} animate={{ y: 0, opacity: 1, rotate: 0 }}
-                    exit={{ y: -60, opacity: 0, transition: { duration: 0.12 } }}
-                    transition={{ type: "spring", stiffness: 260, damping: 20 }}
-                    className="text-8xl leading-tight font-semibold">
-            {card ?? "…"}
-          </motion.p>
-        </AnimatePresence>
+        {/* Each card springs in and the last one goes at once: an exit animation could hold a stale card on screen
+            when the guesser taps twice inside it. */}
+        <motion.p key={`${turn.number}-${turn.shown}`} data-testid="tv-card"
+                  initial={{ y: 60, opacity: 0, rotate: -3 }} animate={{ y: 0, opacity: 1, rotate: 0 }}
+                  transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                  className="text-8xl leading-tight font-semibold">
+          {card ?? "…"}
+        </motion.p>
       </div>
       <p className="text-4xl"><span className="font-semibold text-[#2bb673]">{turn.got} got</span> · {turn.passed} passed</p>
     </div>
