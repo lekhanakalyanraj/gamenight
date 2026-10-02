@@ -118,17 +118,16 @@ test("a TV and five phones play a whole game, and nothing secret shows", async (
       phonesSeen.push(await page.locator("body").innerText());
 
       const card = page.getByTestId("card");
+      // Held with Space on the focused card (the card's keyboard hold): a press at the card's on-screen position
+      // could land beside it when a caption arriving shifts the page, which flaked in the slower cluster.
       if (!cards.has(name) && (await card.isVisible()) && tvPhase !== "setup") {
-        const box = await card.boundingBox();
-        if (box) {
-          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-          await page.mouse.down();
-          await expect(card).toHaveAttribute("data-showing", "true");
-          await expect(page.getByTestId("card-face")).not.toHaveText("Dealing…");
-          cards.set(name, ((await page.getByTestId("card-face").textContent()) ?? "").trim());
-          await page.mouse.up();
-          await expect(card).toHaveAttribute("data-showing", "false");
-        }
+        await card.focus();
+        await page.keyboard.down("Space");
+        await expect(card).toHaveAttribute("data-showing", "true");
+        await expect(page.getByTestId("card-face")).not.toHaveText("Dealing…");
+        cards.set(name, ((await page.getByTestId("card-face").textContent()) ?? "").trim());
+        await page.keyboard.up("Space");
+        await expect(card).toHaveAttribute("data-showing", "false");
       }
 
       // The host pauses once during the clues: the TV says so, and the game holds until they resume.
