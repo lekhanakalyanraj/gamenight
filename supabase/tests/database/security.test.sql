@@ -36,7 +36,8 @@ select set_eq(
   array['create_room', 'join_room', 'leave_room', 'kick_member',
         'start_display_pairing', 'pair_display', 'remove_display',
         'start_game', 'submit_action', 'pause_game', 'resume_game', 'extend_phase', 'skip_turn', 'skip_phase',
-        'settle_judgement', 'end_game', 'set_voice', 'set_topic', 'answer_question', 'play_joker'],
+        'settle_judgement', 'end_game', 'set_voice', 'set_topic', 'answer_question', 'play_joker',
+        'set_interests', 'headsup_move', 'headsup_live_card'],
   'the only SECURITY DEFINER functions signed-in users can call through the API are the room and game RPCs'
 );
 

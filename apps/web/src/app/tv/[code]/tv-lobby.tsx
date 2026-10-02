@@ -3,19 +3,23 @@
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { AgeBadge, HostCaption, PlayerCount, PlayerTile, RoomEnded } from "@/components/lobby";
 import { Narrator } from "@/components/narrator";
 import { ButtonLink } from "@/components/ui";
 import { useNow } from "@/lib/clock";
-import { type Lobby, useDisplayEvents, useLiveRoom } from "@/lib/realtime";
+import { type Lobby, type TvCard, useDisplayEvents, useLiveRoom } from "@/lib/realtime";
 import { activeMembers, latestHostLine, MIN_PLAYERS } from "@/lib/room";
 
 // Client-only, like the phone's game screen: Motion's inline styles must not be server-rendered (strict CSP).
 const TvGame = dynamic(() => import("@/components/game/tv-game"), {
   ssr: false,
   loading: () => <p className="p-10 text-center text-3xl text-muted">Loading the game…</p>,
+});
+const TvHeadsUp = dynamic(() => import("@/components/game/headsup-tv"), {
+  ssr: false,
+  loading: () => <p className="p-10 text-center text-3xl text-muted">Loading Heads Up…</p>,
 });
 const TvQuiz = dynamic(() => import("@/components/game/quiz-tv"), {
   ssr: false,
@@ -34,7 +38,9 @@ export function TvLobby({ lobby, userId, joinUrl, qr }: {
   const router = useRouter();
   const live = useLiveRoom(lobby, { kind: "tv" });
   const now = useNow(1000);
-  useDisplayEvents(userId, { onUnpaired: () => router.replace("/tv") });
+  // Heads Up's live card comes on this TV's own topic: the only screen in the room that ever gets it.
+  const [card, setCard] = useState<TvCard | null>(null);
+  useDisplayEvents(userId, { onUnpaired: () => router.replace("/tv"), onCard: setCard });
 
   // Disconnected by the host, or the room is otherwise out of reach: go back to showing a pairing code.
   useEffect(() => {
@@ -53,6 +59,7 @@ export function TvLobby({ lobby, userId, joinUrl, qr }: {
   const narrator = <Narrator lines={live.hostLines} clips={live.clips} voiceOn={live.room.voice} />;
   const game = live.game;
   if (game && (game.game.phase !== "ended" || Date.parse(game.game.ended_at ?? "") > now - REVEAL_SECONDS * 1000)) {
+    if (game.game.kind === "heads_up") return <>{narrator}<TvHeadsUp live={{ ...live, game }} pushed={card} /></>;
     const Screen = game.game.kind === "quiz" ? TvQuiz : TvGame;
     return <>{narrator}<Screen live={{ ...live, game }} /></>;
   }

@@ -16,3 +16,4 @@ export type GameAction = Public["Tables"]["game_actions"]["Row"];
 export type QuizQuestion = Public["Tables"]["quiz_questions"]["Row"];
 export type QuizAnswer = Public["Tables"]["quiz_answers"]["Row"];
 export type QuizScore = Public["Tables"]["quiz_scores"]["Row"];
+export type HeadsupTurn = Public["Tables"]["headsup_turns"]["Row"];

@@ -118,17 +118,16 @@ test("a TV and five phones play a whole game, and nothing secret shows", async (
       phonesSeen.push(await page.locator("body").innerText());
 
       const card = page.getByTestId("card");
+      // Held with Space on the focused card (the card's keyboard hold): a press at the card's on-screen position
+      // could land beside it when a caption arriving shifts the page, which flaked in the slower cluster.
       if (!cards.has(name) && (await card.isVisible()) && tvPhase !== "setup") {
-        const box = await card.boundingBox();
-        if (box) {
-          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-          await page.mouse.down();
-          await expect(card).toHaveAttribute("data-showing", "true");
-          await expect(page.getByTestId("card-face")).not.toHaveText("Dealing…");
-          cards.set(name, ((await page.getByTestId("card-face").textContent()) ?? "").trim());
-          await page.mouse.up();
-          await expect(card).toHaveAttribute("data-showing", "false");
-        }
+        await card.focus();
+        await page.keyboard.down("Space");
+        await expect(card).toHaveAttribute("data-showing", "true");
+        await expect(page.getByTestId("card-face")).not.toHaveText("Dealing…");
+        cards.set(name, ((await page.getByTestId("card-face").textContent()) ?? "").trim());
+        await page.keyboard.up("Space");
+        await expect(card).toHaveAttribute("data-showing", "false");
       }
 
       // The host pauses once during the clues: the TV says so, and the game holds until they resume.
@@ -142,15 +141,6 @@ test("a TV and five phones play a whole game, and nothing secret shows", async (
         await page.getByRole("button", { name: "Close host controls" }).click();
       }
 
-      // Asha's phone drops off mid-vote and comes back: it must catch up by itself and still vote.
-      if (name === "Asha" && !wentOffline && tvPhase === "vote" && (await page.getByTestId("vote").isVisible())) {
-        wentOffline = true;
-        await phone.context.setOffline(true);
-        await page.waitForTimeout(3_000);
-        await phone.context.setOffline(false);
-        await expect(page.getByTestId("phone-game")).toHaveAttribute("data-phase", /vote|clues|guess|ended/, { timeout: 30_000 });
-      }
-
       // The TV reloads mid-game once: the page is rendered on the server again, then catches up.
       if (!reloaded && wentOffline) {
         reloaded = true;
@@ -161,6 +151,15 @@ test("a TV and five phones play a whole game, and nothing secret shows", async (
 
       await tapIfShown(page.getByRole("button", { name: "Done", exact: true }));
       if (await page.getByTestId("vote").isVisible()) {
+        // Asha's phone drops off mid-vote and comes back: it must catch up by itself and still vote. (Checked here,
+        // just before she votes: the vote can open within this pass, right after the last clue's Done.)
+        if (name === "Asha" && !wentOffline) {
+          wentOffline = true;
+          await phone.context.setOffline(true);
+          await page.waitForTimeout(3_000);
+          await phone.context.setOffline(false);
+          await expect(page.getByTestId("phone-game")).toHaveAttribute("data-phase", /vote|clues|guess|ended/, { timeout: 30_000 });
+        }
         await tapIfShown(page.getByTestId("vote").getByRole("button").first());
         await tapIfShown(page.getByRole("button", { name: /^Vote for / }));
       }
@@ -192,7 +191,8 @@ test("a TV and five phones play a whole game, and nothing secret shows", async (
     const expected = role === "Mr. White" ? "You're Mr. White" : role === "undercover" ? words[1] : words[0];
     expect(face, `${name}'s card`).toBe(expected);
   }
-  expect(paused && wentOffline && reloaded, "the pause, the dropped phone and the TV reload all happened").toBe(true);
+  expect({ paused, wentOffline, reloaded }, "the pause, the dropped phone and the TV reload all happened")
+    .toEqual({ paused: true, wentOffline: true, reloaded: true });
   expect(cspViolations, "the game screens run under the strict CSP").toEqual([]);
 
   // Play again: the host goes back to the lobby, ready to start another game.

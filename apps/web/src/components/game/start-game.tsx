@@ -24,7 +24,8 @@ function useLocaleRegion(): string {
   }, () => "");
 }
 
-type Kind = "undercover" | "quiz";
+type Kind = "undercover" | "quiz" | "heads_up";
+const GAME_NAMES: Record<Kind, string> = { undercover: "Undercover", quiz: "Quiz Night", heads_up: "Heads Up" };
 
 /** Small round buttons, one of which is picked. */
 function Choices<T extends string | number>({ label, options, value, onChange, format = String }: {
@@ -52,12 +53,20 @@ function Choices<T extends string | number>({ label, options, value, onChange, f
 /**
  * The host picks a game and starts it. Undercover: a theme (or the AI's choice) and a region for word pairs
  * everyone knows. Quiz Night: how many rounds and how long a question (players pick their topics in the lobby).
+ * Heads Up: how many turns each and how long a turn (players pick their interests in the lobby).
  */
-export function StartGame({ roomId, players, topics }: { roomId: string; players: number; topics: number }) {
+export function StartGame({ roomId, players, topics, interests }: {
+  roomId: string;
+  players: number;
+  topics: number;
+  interests: number;
+}) {
   const [kind, setKind] = useState<Kind>("undercover");
   const [theme, setTheme] = useState(THEMES[0]);
   const [rounds, setRounds] = useState(4);
   const [seconds, setSeconds] = useState(20);
+  const [turns, setTurns] = useState(1);
+  const [turnSeconds, setTurnSeconds] = useState(60);
   const detected = useLocaleRegion();
   const [chosen, setRegion] = useState<string | null>(null);
   const region = chosen ?? detected;
@@ -65,19 +74,28 @@ export function StartGame({ roomId, players, topics }: { roomId: string; players
   const [pending, startTransition] = useTransition();
 
   const short = MIN_PLAYERS - players;
-  const name = kind === "quiz" ? "Quiz Night" : "Undercover";
+  const name = GAME_NAMES[kind];
   return (
     <Card className="flex flex-col gap-4">
-      <div role="tablist" aria-label="Game" className="grid grid-cols-2 gap-1 rounded-full border border-border bg-surface-2 p-1">
-        {(["undercover", "quiz"] as const).map((k) => (
+      <div role="tablist" aria-label="Game" className="grid grid-cols-3 gap-1 rounded-full border border-border bg-surface-2 p-1">
+        {(["undercover", "quiz", "heads_up"] as const).map((k) => (
           <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)}
                   className={`h-10 rounded-full text-sm font-medium transition ${kind === k ? "bg-accent text-accent-ink" : "text-muted"}`}>
-            {k === "quiz" ? "Quiz Night" : "Undercover"}
+            {GAME_NAMES[k]}
           </button>
         ))}
       </div>
       {kind === "undercover" ? (
         <Choices label="Theme for the secret words" options={THEMES} value={theme} onChange={setTheme} />
+      ) : kind === "heads_up" ? (
+        <>
+          <Choices label="Turns each" options={[1, 2] as const} value={turns} onChange={setTurns} />
+          <Choices label="Time for each turn" options={[45, 60, 90] as const} value={turnSeconds} onChange={setTurnSeconds}
+                   format={(s) => `${s} seconds`} />
+          <p className="text-sm text-muted">
+            {interests} of {players} picked interests. The deck leans toward them.
+          </p>
+        </>
       ) : (
         <>
           <Choices label="Rounds of 5 questions" options={[3, 4, 5] as const} value={rounds} onChange={setRounds} />
@@ -89,7 +107,7 @@ export function StartGame({ roomId, players, topics }: { roomId: string; players
         </>
       )}
       <label className="flex items-center justify-between gap-3 text-sm">
-        <span className="text-muted">{kind === "quiz" ? "Questions everyone knows in" : "Words everyone knows in"}</span>
+        <span className="text-muted">{kind === "quiz" ? "Questions everyone knows in" : kind === "heads_up" ? "Cards everyone knows in" : "Words everyone knows in"}</span>
         <select value={region} onChange={(e) => setRegion(e.target.value)}
                 className="h-10 rounded-xl border border-border bg-background px-3 text-foreground">
           {REGIONS.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
@@ -101,7 +119,9 @@ export function StartGame({ roomId, players, topics }: { roomId: string; players
         onClick={() => startTransition(async () => {
           const result = await startGame(roomId, kind === "quiz"
             ? { kind, rounds, seconds, region: region || null }
-            : { kind, theme: theme === THEMES[0] ? null : theme.toLowerCase(), region: region || null });
+            : kind === "heads_up"
+              ? { kind, turns, seconds: turnSeconds, region: region || null }
+              : { kind, theme: theme === THEMES[0] ? null : theme.toLowerCase(), region: region || null });
           setError(result.error);
         })}
       >

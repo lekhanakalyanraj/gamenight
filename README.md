@@ -24,7 +24,7 @@ A multiplayer party-game platform: a **TV** hosts the room, players join from th
 | 4 | The narrator's voice: every line the TV shows is spoken (ElevenLabs), with captions | **done** |
 | 4b | Kubernetes: every service in kind under the restricted profile, network policies proven enforced, CI deploys and plays there | **done** |
 | 5 | Quiz Night: grounded questions with sources, answers on phones, speed scoring, picture rounds | **done** |
-| 6 | Heads Up | |
+| 6 | Heads Up: the word on the TV, the guesser's back to it; AI decks from the group's interests | **in progress** (6a: the game, a seed deck and screens) |
 | 7 | Eval suite, dashboards, load test | |
 
 ## Services
@@ -142,6 +142,15 @@ Undercover is the first game. The database runs the rules, and an AI game master
   3. A judge sees only the question, the keyed answer and that sentence, and must confirm the sentence states the answer, exactly one option is right, the question can be read only one way, won't go out of date, and suits the room's rating.
 - **The AI quiz master is never told a live answer.** It picks questions (steering toward trailing players' topics), asks, reveals and hosts, but its briefing and its question search leave answers out until the reveal. It may still know an answer from its own training (the capital of Australia), so the narrator also refuses a line that names the right option without the others, rules out every other option, or says an estimate's number. The database refuses the first and last of those too.
 
+**Heads Up** is the third game (slice 6). The guesser turns their back to the TV; the word shows big on the TV, and the whole room shouts clues while the guesser taps **Got it** or **Pass** on their phone. Turns rotate, and each guesser scores what they got.
+- **The host picks** 1 or 2 turns each and 45, 60 or 90 seconds a turn. Players pick up to three interests in the lobby, and the deck leans toward them (a hand-picked seed deck of 180 cards for now; AI-built decks for any interest come in 6b).
+- **The card is a secret from one person, the guesser,** so only the TV ever gets it:
+  - It goes out only on each paired TV's own Realtime topic, which no phone may join. It's never on the room topic, where the guesser's phone listens.
+  - A TV that reloads asks for it again, and that function answers paired TVs only.
+  - A turn's cards become public at its recap. Until then, the database refuses any host line (narrator or AI host) that names a card on the TV or still to come.
+- **Only the guesser (or the host, for them) can answer a card,** and only the one on screen: each tap names the card's place in the turn, so a late or repeated tap counts once.
+- **The database runs the clock** (the countdown, the guessing, the buzzer), so a turn's timing never waits on the AI. The host can start a turn early, end it, or skip the recap.
+
 **The game simulator** (`evals/simulator`) plays whole games with bots, through the same RPCs and Realtime topics as phones. The game master is either a scripted referee (`make simulate`), or the whole pipeline: dispatcher, Agent Server, game master and narrator (`make simulate GM=agents`). With `GAMENIGHT_MODEL=fake` the pipeline's game master plays scripted rules, some of them deliberately leaky, for free.
 - **In every game, the bots probe for leaks:** they try to read each other's cards, listen on each other's private topics, and scan everything the TV received for a word or a role.
 - **They also try illegal moves,** which the database must refuse, and replay game-master events, which must apply once.
@@ -176,9 +185,10 @@ make simulate     # 20 simulated games of Undercover on the local stack; fails o
 make simulate GM=agents   # the same, with the real pipeline as game master (run agents-dev and dispatcher-dev first)
 make simulate GM=agents VOICE=1   # ...and every line must get its clip (run voice-dev too; a free tone by default)
 make simulate GAME=quiz   # whole quizzes: no answer seen before its reveal, every score recomputed and matched
+make simulate GAME=headsup   # whole games of Heads Up: no phone gets a card before its turn's recap; every turn adds up
 make dast         # OWASP ZAP baseline against a running web app (DAST_TARGET=...)
 make hooks        # install pre-commit hooks (gitleaks, ruff)
-npm run test:e2e -w @gamenight/web   # Playwright: a TV and five phones through a lobby, a whole Undercover game and a whole quiz (needs Supabase running)
+npm run test:e2e -w @gamenight/web   # Playwright: a TV and phones through a lobby and a whole game of each: Undercover, a quiz, Heads Up (needs Supabase running)
 ```
 
 ## Security

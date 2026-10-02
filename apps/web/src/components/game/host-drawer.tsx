@@ -30,12 +30,17 @@ export function HostDrawer({ game, roomId, voice }: { game: Game; roomId: string
   const paused = Boolean(game.paused_at);
   const hasClock = Boolean(game.phase_deadline || game.paused_phase_left);
   const quiz = game.kind === "quiz";
+  const headsUp = game.kind === "heads_up";
   const speaking = game.phase === "clues" && game.turn_index !== null;
   // A quiz: close the open question early, or cut the reveal's pause short (the database checks both).
   const canSkipPhase = quiz
     ? (game.phase === "question" || game.phase === "reveal") && Boolean(game.phase_deadline)
-    : ["clues", "discussion", "vote", "guess"].includes(game.phase) && !game.resolved;
-  const skipLabel = !quiz ? "Skip phase" : game.phase === "reveal" ? "Skip the wait" : "Close the question";
+    : headsUp
+      ? ["ready", "guessing", "recap"].includes(game.phase) && Boolean(game.phase_deadline)
+      : ["clues", "discussion", "vote", "guess"].includes(game.phase) && !game.resolved;
+  const skipLabel = headsUp
+    ? ({ ready: "Start now", guessing: "End the turn", recap: "Next turn" } as Record<string, string>)[game.phase] ?? "Skip"
+    : !quiz ? "Skip phase" : game.phase === "reveal" ? "Skip the wait" : "Close the question";
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md px-3 pb-3">
@@ -55,7 +60,7 @@ export function HostDrawer({ game, roomId, voice }: { game: Game; roomId: string
                 {paused ? "Resume" : "Pause"}
               </Button>
               <Button variant="secondary" disabled={pending || !hasClock} onClick={() => control("extend")}>+30 seconds</Button>
-              {quiz ? null : (
+              {quiz || headsUp ? null : (
                 <Button variant="secondary" disabled={pending || paused || !speaking} onClick={() => control("skip_turn")}>
                   Skip speaker
                 </Button>
