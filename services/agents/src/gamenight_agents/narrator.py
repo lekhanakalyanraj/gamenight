@@ -16,7 +16,7 @@ from gamenight_agents.models import reviewer_model
 from gamenight_agents.settings import model_provider
 from gamenight_agents.turn import Turn
 
-MAX_LINE = 280
+MAX_LINE = 200  # what every host's prompt asks for, and what the evals check: longer goes back for a rewrite
 LINES_PER_TURN = 2
 REWRITES = 1
 
@@ -101,10 +101,11 @@ async def narrate(turn: Turn, line: str) -> dict:
     if turn.lines_shown >= LINES_PER_TURN:
         return {"shown": False, "reason": f"at most {LINES_PER_TURN} lines per turn; say nothing more now"}
     state = await games.state(turn.game_id)  # fresh: this turn may have just revealed a role
-    line = " ".join(line.split())[:MAX_LINE]
+    line = " ".join(line.split())
     live_question = (await games.quiz_state(turn.game_id)).get("question") if state["game"].get("kind") == "quiz" \
         else None
-    reasons = (leakcheck.leaks(line, state, turn.picked) or leakcheck.quiz_answer_leaks(line, live_question)
+    too_long = [f"it's {len(line)} characters: keep it under {MAX_LINE}"] if len(line) > MAX_LINE else []
+    reasons = (too_long or leakcheck.leaks(line, state, turn.picked) or leakcheck.quiz_answer_leaks(line, live_question)
                or claims_the_end(line, state) or await review(line, state, turn))
     if not reasons:
         try:
