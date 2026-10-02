@@ -40,7 +40,7 @@ jobs:
     env:
       ROOMS: ${{ inputs.rooms || 25 }}
       GAMES_LOAD: ${{ inputs.games || 50 }}
-      STRICT: ${{ inputs.strict && '--strict' || '' }}
+      STRICT: ${{ inputs.strict && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -66,10 +66,12 @@ jobs:
             sleep 2
           done
           key=$(npx supabase status -o env | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$/\1/p')
+          extra=()
+          if [ "$STRICT" = "true" ]; then extra=(--strict); fi
           set +e
           (cd evals/simulator && SUPABASE_PUBLISHABLE_KEY="$key" AGENTS_SERVICE_TOKEN=local-dev-agents-token \
             uv run python -m gamenight_simulator --load "$ROOMS" --games "$GAMES_LOAD" --game mixed \
-            --game-master agents --max-players 8 --voice $STRICT \
+            --game-master agents --max-players 8 --voice "${extra[@]}" \
             --report-md "$GITHUB_WORKSPACE/load-report.md" --report "$GITHUB_WORKSPACE/load-report.json") \
             > load.log 2>&1
           status=$?
