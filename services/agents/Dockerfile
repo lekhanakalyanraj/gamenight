@@ -2,7 +2,7 @@
 # generates, tidied for hadolint, pinned by digest and run as a non-root user.
 # Build from this directory: docker build services/agents
 
-FROM langchain/langgraph-api:3.12@sha256:6edd1cd4fab2b3ed9c3725ca6f237d55afdf55747026c3602cebd41d09d3173c
+FROM langchain/langgraph-api:3.14@sha256:96b74c5b59a4a5e693f4bf4f5522d3eb02a1b08c5c0ad3286c19ecb12e92187b
 # Debian's security updates, so a fix published after the base image was built still ships (the image scan
 # fails on any fixable high or critical vulnerability; upstream rebuilds can take days).
 RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
