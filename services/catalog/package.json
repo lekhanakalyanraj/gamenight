@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/node": "^22.20.4",
+    "@types/node": "^22.20.5",
     "typescript": "^7"
   },
   "dependencies": {
