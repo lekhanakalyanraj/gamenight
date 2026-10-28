@@ -8,6 +8,7 @@ import { HostDrawer } from "@/components/game/host-drawer";
 import { Banner, HowTo, PhaseTitle, PhoneHeading, Status, Timer } from "@/components/game/parts";
 import { Leaderboard, Podium } from "@/components/game/quiz-parts";
 import { HostCaption } from "@/components/lobby";
+import ClickSpark from "@/components/react-bits/ClickSpark";
 import { Button, Notice } from "@/components/ui";
 import { headsupMove } from "@/app/play/[code]/game-actions";
 import { useCountdown, useNow } from "@/lib/clock";
@@ -149,10 +150,12 @@ function GuessPad({ turn, shown, guesser, pending, onTap }: {
           </div>
         </dl>
       </div>
-      <button type="button" disabled={pending} onClick={() => onTap("got")}
-              className="flex h-44 items-end justify-between bg-ink p-5 text-5xl tracking-tight text-background transition active:opacity-80 disabled:opacity-40">
-        Got it <span aria-hidden className="caps text-sm opacity-60">✓</span>
-      </button>
+      <ClickSpark sparkColor="#000000" sparkSize={14} sparkRadius={34} sparkCount={10}>
+        <button type="button" disabled={pending} onClick={() => onTap("got")}
+                className="flex h-44 w-full items-end justify-between bg-ink p-5 text-5xl tracking-tight text-background transition active:opacity-80 disabled:opacity-40">
+          Got it <span aria-hidden className="caps text-sm opacity-60">✓</span>
+        </button>
+      </ClickSpark>
       <button type="button" disabled={pending} onClick={() => onTap("pass")}
               className="flex h-28 items-end justify-between border border-ink p-5 text-4xl tracking-tight transition active:bg-surface-2 disabled:opacity-40">
         Pass <span aria-hidden className="caps text-sm text-muted">→</span>

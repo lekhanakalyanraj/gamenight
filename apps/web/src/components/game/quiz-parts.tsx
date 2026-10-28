@@ -5,6 +5,8 @@ import { LayoutGroup, motion } from "motion/react";
 import { useEffect, useState } from "react";
 
 import { Avatar } from "@/components/game/parts";
+import ClickSpark from "@/components/react-bits/ClickSpark";
+import CountUp from "@/components/react-bits/CountUp";
 import { Button } from "@/components/ui";
 import {
   type ChoiceResults,
@@ -56,7 +58,7 @@ export function AnswerTiles({ question, big = false, picked, disabled, onPick }:
       }));
 
   const two = tiles.length === 2;
-  return (
+  const list = (
     <ul className={`grid ${big ? "grid-cols-2 gap-x-10 border-t border-border" : two ? "grid-cols-2 gap-2" : "grid-cols-1 gap-2"}`}>
       {tiles.map((t) => {
         const state: TileState = t.isRight === true ? "right" : t.isRight === false ? (t.isPicked ? "wrong" : "dim")
@@ -99,6 +101,8 @@ export function AnswerTiles({ question, big = false, picked, disabled, onPick }:
       })}
     </ul>
   );
+  // On a phone, a tap sparks (ink on the light canvas).
+  return onPick ? <ClickSpark sparkColor="#000000" sparkSize={10} sparkRadius={22} sparkCount={8}>{list}</ClickSpark> : list;
 }
 
 /**
@@ -246,15 +250,17 @@ export function QuizPicture({ question, big = false }: { question: QuizQuestion;
 
 /**
  * Everyone's points in order, reordering with movement as scores change. `before`: places when the question was
- * asked, so each row can show how far it moved at the reveal.
+ * asked, so each row can show how far it moved at the reveal. `count`: points count up to their new total (the TV's
+ * live standings); without it they're exact at once, as anyone reading a final table needs.
  */
-export function Leaderboard({ scores, names, before, big = false, meId, limit }: {
+export function Leaderboard({ scores, names, before, big = false, meId, limit, count = false }: {
   scores: QuizScore[];
   names: Map<string, string>;
   before?: Map<string, number>;
   big?: boolean;
   meId?: string;
   limit?: number;
+  count?: boolean;
 }) {
   const rows = standings(scores).slice(0, limit ?? scores.length);
   return (
@@ -280,7 +286,9 @@ export function Leaderboard({ scores, names, before, big = false, meId, limit }:
                   {moved > 0 ? `▲${moved}` : `▼${-moved}`}
                 </motion.span>
               ) : null}
-              <span className={`font-mono tabular-nums ${big ? "text-2xl" : ""}`}>{formatNumber(s.points)}</span>
+              <span className={`font-mono tabular-nums ${big ? "text-2xl" : ""}`}>
+                {count ? <CountUp to={s.points} separator="," duration={0.8} trigger="load" /> : formatNumber(s.points)}
+              </span>
             </motion.li>
           );
         })}
@@ -318,7 +326,9 @@ export function Podium({ scores, names, big = false }: { scores: QuizScore[]; na
                     className={`flex flex-col gap-2 ${big ? "px-4" : "px-1"}`}>
           <Avatar id={s.member_id} name={names.get(s.member_id) ?? "?"} size={big ? 72 : 40} live={s.place === 1} />
           <span className={`truncate ${big ? "text-3xl" : ""}`}>{names.get(s.member_id) ?? "?"}</span>
-          <span className={`font-mono text-muted ${big ? "text-2xl" : "text-sm"}`}>{formatNumber(s.points)}</span>
+          <span className={`font-mono text-muted ${big ? "text-2xl" : "text-sm"}`}>
+            <CountUp to={s.points} separator="," duration={1.4} delay={s.place === 1 ? 1.2 : s.place === 2 ? 0.7 : 0.2} trigger="load" />
+          </span>
           <div className={`flex items-start p-3 ${s.place === 1 ? "bg-accent text-accent-ink" : "bg-ink text-background"} ${height(s.place)}`}>
             <span className={`numeral ${big ? "text-8xl" : "text-4xl"}`}>{s.place}</span>
           </div>

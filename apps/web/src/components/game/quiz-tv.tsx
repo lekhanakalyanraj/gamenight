@@ -7,6 +7,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Avatar, PhaseTitle, StageHeading, Timer, TvFrame } from "@/components/game/parts";
 import { AnswerTiles, Clues, Leaderboard, OrderList, Podium, QuizPicture, usePlacesWhenAsked } from "@/components/game/quiz-parts";
 import { HostCaption } from "@/components/lobby";
+import BlurText from "@/components/react-bits/BlurText";
 import { useCountdown, useNow } from "@/lib/clock";
 import type { LiveGame } from "@/lib/game";
 import {
@@ -66,7 +67,8 @@ export default function TvQuiz({ live }: { live: LiveRoom & { game: LiveGame } }
         caption={<HostCaption text={latestHostLine(live.hostLines)?.text ?? null} size="tv" />}
         aside={
           <>
-            <Leaderboard scores={scores} names={names} before={question?.revealed_at ? before : undefined} big />
+            <Leaderboard scores={scores} names={names} before={question?.revealed_at ? before : undefined} big
+                         count={!ended} />
             {!live.connected ? <p role="status" className="caps mt-auto text-lg text-muted">Reconnecting…</p> : null}
           </>
         }
@@ -111,7 +113,11 @@ function RoundIntro({ round, name }: ReturnType<typeof nextRound>) {
                 transition={{ duration: 0.3, ease: [0.2, 0, 0, 1] }} className="flex items-baseline gap-8 text-7xl">
         Round <span className="numeral text-[16rem]">{round}</span>
       </motion.p>
-      {name ? <p className="caps border-t border-border pt-6 text-3xl">{ROUND_LABEL[name]}</p> : null}
+      {name ? (
+        <p className="caps border-t border-border pt-6 text-3xl">
+          <BlurText text={ROUND_LABEL[name]} trigger="load" delay={80} stepDuration={0.3} blur={10} distance={14} />
+        </p>
+      ) : null}
       {name ? <p className="max-w-3xl text-3xl text-muted">{ROUND_HOW[name]}</p> : null}
     </div>
   );
@@ -140,7 +146,9 @@ function QuestionStage({ question, names, open, answered, playing, now }: {
   return (
     <div data-testid="tv-question" className="flex flex-col gap-6">
       <ForWhom question={question} names={names} />
-      <h2 className={`${kind === "lightning" ? "text-7xl" : "text-6xl"} leading-[1.1] tracking-tight`}>{question.prompt}</h2>
+      <h2 className={`${kind === "lightning" ? "text-7xl" : "text-6xl"} leading-[1.1] tracking-tight`}>
+        <BlurText key={question.number} text={question.prompt} trigger="load" delay={45} stepDuration={0.25} blur={8} distance={18} />
+      </h2>
       {question.image_path ? <QuizPicture question={question} big /> : null}
       {kind === "connect" ? <Clues question={question} now={now} big /> : null}
       {kind === "estimate" ? (

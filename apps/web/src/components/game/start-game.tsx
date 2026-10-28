@@ -2,6 +2,8 @@
 
 import { useState, useSyncExternalStore, useTransition } from "react";
 
+import Magnet from "@/components/react-bits/Magnet";
+import ShinyText from "@/components/react-bits/ShinyText";
 import { Button, Card, Notice } from "@/components/ui";
 import { startGame } from "@/app/play/[code]/game-actions";
 import { LENGTHS } from "@/lib/quiz";
@@ -49,7 +51,9 @@ function GamePicker({ kind, onChange }: { kind: Kind; onChange: (kind: Kind) => 
                   aria-describedby={`game-${g.kind}-about`} onClick={() => onChange(g.kind)}
                   className={`flex flex-col gap-3 border p-4 text-left transition duration-200 motion-reduce:transition-none ${picked ? "-translate-y-1 border-ink bg-ink text-background" : "border-border bg-surface hover:border-ink"}`}>
             <span className="flex items-baseline justify-between gap-2">
-              <span className="text-xl tracking-tight">{GAME_NAMES[g.kind]}</span>
+              <span className="text-xl tracking-tight">
+                {picked ? <ShinyText text={GAME_NAMES[g.kind]} color="#d9dbda" shineColor="#ffffff" speed={2.4} delay={1.6} /> : GAME_NAMES[g.kind]}
+              </span>
               <span aria-hidden className={`size-3 ${picked ? "bg-background" : "border border-current opacity-40"}`} />
             </span>
             <span id={`game-${g.kind}-about`} className="flex flex-col gap-3">
@@ -156,8 +160,10 @@ export function StartGame({ roomId, players, topics, interests }: {
           {REGIONS.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
         </select>
       </label>
+      {/* A cursor near Start pulls it a little (a host on a laptop; touch screens are left alone). */}
+      <Magnet padding={60} magnetStrength={6} maxOffset={8} wrapperClassName="block w-full">
       <Button
-        className="h-14 text-lg"
+        className="h-14 w-full text-lg"
         disabled={pending || short > 0}
         onClick={() => startTransition(async () => {
           const result = await startGame(roomId, kind === "quiz"
@@ -170,6 +176,7 @@ export function StartGame({ roomId, players, topics, interests }: {
       >
         {pending ? "Starting…" : short > 0 ? `${short} more player${short === 1 ? "" : "s"} needed` : `Start ${name}`}
       </Button>
+      </Magnet>
       <Notice>{error}</Notice>
     </Card>
   );

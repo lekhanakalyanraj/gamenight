@@ -117,4 +117,6 @@ evals and their latest results) is in [ENGINEERING.md](ENGINEERING.md).
 
 ## Licence
 
-[MIT](LICENSE)
+[MIT](LICENSE), except a few animation components from [React Bits](https://reactbits.dev) in
+[apps/web/src/components/react-bits](apps/web/src/components/react-bits), which keep their own licence (MIT + Commons
+Clause).
