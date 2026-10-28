@@ -7,11 +7,10 @@ name: kind
 # when the Kubernetes side can change (the charts, the images, their dependencies, the schema) and on main; the
 # job always reports a result (skipped when nothing relevant changed), so it can be a required check.
 # The Agent Server image needs a LangSmith key to start: LANGSMITH_API_KEY, in the `kind` environment.
+# For now it runs by hand only (gh workflow run kind.yml): the key needs renewing. With it back, restore the
+# pull_request and push-to-main triggers.
 
 on:
-  pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions: {}
