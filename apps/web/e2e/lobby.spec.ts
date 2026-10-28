@@ -57,6 +57,14 @@ test("a TV and five phones share one live lobby", async ({ browser }) => {
   const joinUrl = (await tv.getByTestId("join-qr").getAttribute("data-join-url")) ?? "";
   expect(joinUrl).toMatch(new RegExp(`/join\\?code=${roomCode}$`));
 
+  // The TV's pets: napping and trotting in the lobby, gone when the host switches them off, back when it's on.
+  await expect(tv.getByTestId("pets")).toHaveAttribute("data-mood", "lobby");
+  await host.page.getByTestId("pets-switch").click();
+  await expect(tv.getByTestId("pets")).toHaveCount(0);
+  await host.page.getByTestId("pets-switch").click();
+  await expect(tv.getByTestId("pets")).toBeVisible();
+  await tv.screenshot({ path: test.info().outputPath("tv-lobby.png") });
+
   // Four guests follow the address in the TV's QR code.
   const names = ["Asha", "Ben", "Chen", "Dara"];
   const guests: Array<Awaited<ReturnType<typeof newPhone>> & { name: string }> = [];

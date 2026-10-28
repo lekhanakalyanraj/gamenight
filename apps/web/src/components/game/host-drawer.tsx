@@ -7,13 +7,13 @@ import { useState, useTransition } from "react";
 import { Button, Notice } from "@/components/ui";
 import { hostControl } from "@/app/play/[code]/game-actions";
 import { HostChat } from "@/app/play/[code]/host-chat";
-import { VoiceSwitch } from "@/components/voice-switch";
+import { PetsSwitch, VoiceSwitch } from "@/components/voice-switch";
 
 /**
  * The host's controls, in a drawer at the bottom of their screen: the host plays like everyone else, and
  * steers the game when they need to. The database decides what's allowed right now; a refusal is shown.
  */
-export function HostDrawer({ game, roomId, voice }: { game: Game; roomId: string; voice: boolean }) {
+export function HostDrawer({ game, roomId, voice, pets }: { game: Game; roomId: string; voice: boolean; pets: boolean }) {
   const [open, setOpen] = useState(false);
   const [chat, setChat] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
@@ -78,7 +78,10 @@ export function HostDrawer({ game, roomId, voice }: { game: Game; roomId: string
               <Button variant="secondary" onClick={() => setConfirmEnd(true)}>End game…</Button>
             )}
             <Notice>{error}</Notice>
-            <VoiceSwitch roomId={roomId} on={voice} />
+            <div className="grid grid-cols-2 gap-2">
+              <VoiceSwitch roomId={roomId} on={voice} />
+              <PetsSwitch roomId={roomId} on={pets} />
+            </div>
             <Button variant="secondary" onClick={() => setChat((c) => !c)}>{chat ? "Hide chat" : "Chat with the AI host"}</Button>
             {chat ? <HostChat roomId={roomId} /> : null}
           </motion.section>

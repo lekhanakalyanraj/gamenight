@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 
 import { AgeBadge, HostCaption, PlayerCount, PlayerTile, RoomEnded } from "@/components/lobby";
 import { Narrator } from "@/components/narrator";
+import { petMood, Pets } from "@/components/pets";
 import { ButtonLink } from "@/components/ui";
 import { useNow } from "@/lib/clock";
 import { type Lobby, type TvCard, useDisplayEvents, useLiveRoom } from "@/lib/realtime";
@@ -55,10 +56,16 @@ export function TvLobby({ lobby, userId, joinUrl, qr }: {
     );
   }
 
-  // Above the lobby and the game alike, so the voice carries on as the TV switches between them.
-  const narrator = <Narrator lines={live.hostLines} clips={live.clips} voiceOn={live.room.voice} />;
   const game = live.game;
-  if (game && (game.game.phase !== "ended" || Date.parse(game.game.ended_at ?? "") > now - REVEAL_SECONDS * 1000)) {
+  const showGame = game && (game.game.phase !== "ended" || Date.parse(game.game.ended_at ?? "") > now - REVEAL_SECONDS * 1000);
+  // Above the lobby and the game alike, so the voice carries on, and the pets stay, as the TV switches between them.
+  const narrator = (
+    <>
+      <Narrator lines={live.hostLines} clips={live.clips} voiceOn={live.room.voice} />
+      <Pets on={live.room.pets} mood={petMood(showGame ? game.game : null)} />
+    </>
+  );
+  if (game && showGame) {
     if (game.game.kind === "heads_up") return <>{narrator}<TvHeadsUp live={{ ...live, game }} pushed={card} /></>;
     const Screen = game.game.kind === "quiz" ? TvQuiz : TvGame;
     return <>{narrator}<Screen live={{ ...live, game }} /></>;

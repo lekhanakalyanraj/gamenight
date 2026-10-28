@@ -350,13 +350,13 @@ isOneToOne: false
                   ]
                 },"rooms": {
                   Row: {
-                    "age_rating": Database["public"]['Enums']["age_rating"],"closed_at": string | null,"code": string,"created_at": string,"host_id": string,"id": string,"max_players": number,"status": Database["public"]['Enums']["room_status"],"voice": boolean
+                    "age_rating": Database["public"]['Enums']["age_rating"],"closed_at": string | null,"code": string,"created_at": string,"host_id": string,"id": string,"max_players": number,"pets": boolean,"status": Database["public"]['Enums']["room_status"],"voice": boolean
                   }
                   Insert: {
-                    "age_rating"?: Database["public"]['Enums']["age_rating"],"closed_at"?: string | null,"code": string,"created_at"?: string,"host_id": string,"id"?: string,"max_players"?: number,"status"?: Database["public"]['Enums']["room_status"],"voice"?: boolean
+                    "age_rating"?: Database["public"]['Enums']["age_rating"],"closed_at"?: string | null,"code": string,"created_at"?: string,"host_id": string,"id"?: string,"max_players"?: number,"pets"?: boolean,"status"?: Database["public"]['Enums']["room_status"],"voice"?: boolean
                   }
                   Update: {
-                    "age_rating"?: Database["public"]['Enums']["age_rating"],"closed_at"?: string | null,"code"?: string,"created_at"?: string,"host_id"?: string,"id"?: string,"max_players"?: number,"status"?: Database["public"]['Enums']["room_status"],"voice"?: boolean
+                    "age_rating"?: Database["public"]['Enums']["age_rating"],"closed_at"?: string | null,"code"?: string,"created_at"?: string,"host_id"?: string,"id"?: string,"max_players"?: number,"pets"?: boolean,"status"?: Database["public"]['Enums']["room_status"],"voice"?: boolean
                   }
                   Relationships: [
                     
@@ -420,6 +420,7 @@ isOneToOne: false
 "host_id": string,
 "id": string,
 "max_players": number,
+"pets": boolean,
 "status": Database["public"]['Enums']["room_status"],
 "voice": boolean
             }
@@ -678,6 +679,9 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"set_pets":
+{ Args: { "p_on": boolean,"p_room_id": string }; Returns: undefined
+                           },
 "set_topic":
 { Args: { "p_context"?: string,"p_room_id": string,"p_topic": string }; Returns: {
               "adult_confirmed": boolean,

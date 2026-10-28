@@ -7,7 +7,7 @@ import { StartGame } from "@/components/game/start-game";
 import { useNow } from "@/lib/clock";
 import { AgeBadge, HostCaption, PlayerCount, PlayerTile, RoomEnded } from "@/components/lobby";
 import { Button, ButtonLink, Card, Field, Label, Notice, Page } from "@/components/ui";
-import { VoiceSwitch } from "@/components/voice-switch";
+import { PetsSwitch, VoiceSwitch } from "@/components/voice-switch";
 import { type Lobby, useLiveRoom } from "@/lib/realtime";
 import { activeMembers, latestHostLine, type LobbyDisplay, type LobbyMember } from "@/lib/room";
 import { CONTEXT_MAX, INTEREST_SUGGESTIONS, SUGGESTIONS, topicClass } from "@/lib/topics";
@@ -93,7 +93,12 @@ export function PhoneLobby({ lobby, meId, isHost }: { lobby: Lobby; meId: string
 
       {isHost ? <TvPanel roomId={live.room.id} displays={live.displays} tvOnline={live.tvOnline} /> : null}
 
-      {isHost ? <VoiceSwitch roomId={live.room.id} on={live.room.voice} /> : null}
+      {isHost ? (
+        <div className="grid grid-cols-2 gap-2">
+          <VoiceSwitch roomId={live.room.id} on={live.room.voice} />
+          <PetsSwitch roomId={live.room.id} on={live.room.pets} />
+        </div>
+      ) : null}
 
       <Card label={<span className="flex justify-between gap-3"><span>Players</span><span className="normal-case tracking-normal"><PlayerCount count={players.length} max={live.room.max_players} /></span></span>}>
         <ul className="-mt-2 flex flex-col">

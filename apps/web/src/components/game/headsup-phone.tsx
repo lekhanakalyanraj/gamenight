@@ -118,7 +118,7 @@ export default function PhoneHeadsUp({ live, meId, isHost, onBackToLobby }: {
 
         {!live.connected ? <p role="status" className="caps text-xs text-muted">Reconnecting…</p> : null}
       </main>
-      {isHost && game.phase !== "ended" ? <HostDrawer game={game} roomId={live.room.id} voice={live.room.voice} /> : null}
+      {isHost && game.phase !== "ended" ? <HostDrawer game={game} roomId={live.room.id} voice={live.room.voice} pets={live.room.pets} /> : null}
     </MotionConfig>
   );
 }

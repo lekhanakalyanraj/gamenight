@@ -736,6 +736,32 @@ $$;
 
 revoke all on function private.source_blocked(text) from public, anon, authenticated;
 
+-- ---------------------------------------------------------------------------
+-- The TV's pets: a dog and a cat along the bottom of the screen, on unless the host switches them off
+-- ---------------------------------------------------------------------------
+
+alter table public.rooms add column pets boolean not null default true;
+
+create function public.set_pets(p_room_id uuid, p_on boolean)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if p_on is null then
+    raise exception 'Say whether the pets are on or off.' using errcode = '22023';
+  end if;
+  update public.rooms set pets = p_on
+  where id = p_room_id and host_id = (select auth.uid()) and status <> 'closed';
+  if not found then
+    raise exception 'Only the host can turn the pets on or off.' using errcode = '42501';
+  end if;
+end;
+$$;
+revoke all on function public.set_pets(uuid, boolean) from public, anon;
+grant execute on function public.set_pets(uuid, boolean) to authenticated;
+
 revoke all on function public.set_topic(uuid, text, text) from public, anon;
 grant execute on function public.set_topic(uuid, text, text) to authenticated;
 revoke all on function public.set_interests(uuid, text[], text) from public, anon;

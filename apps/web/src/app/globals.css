@@ -155,3 +155,91 @@ h1, h2, h3, strong, b {
     font-size: clamp(12px, 3.2vw, 18px);
   }
 }
+
+/*
+ * The TV's pets (components/pets.tsx): a lane along the bottom right of the screen. Two walk frames swap with
+ * steps(); everything else is a transform. Under "reduce motion" they stand still.
+ */
+.pets {
+  --lane: max(25vw, 28rem); /* the standings column on game screens: nothing else lives at its bottom */
+  --trot: calc(var(--lane) - 9.5rem);
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  width: var(--lane);
+  height: 4.5rem;
+  overflow: hidden;
+  pointer-events: none;
+}
+.pet {
+  position: absolute;
+  bottom: 0.5rem;
+  width: 4rem;
+  height: 2.5rem;
+}
+.pet-dog { left: 1rem; }
+.pet-cat { right: 21rem; } /* left of the narrator's badge in the corner (the dog trots behind it) */
+.pet-coat { fill: #d9a066; }
+.pet-white { fill: #f2efe8; }
+.pet-dark { fill: #0f0e12; }
+.pet-fur { fill: #9a9aa3; }
+.pet-stripe { fill: #6e6e78; }
+.pet-frame-b { visibility: hidden; }
+
+/* Moving: the legs swap. */
+.pets-lobby .pet-dog .pet-frame-a, .pets-walk .pet .pet-frame-a, .pets-chase .pet .pet-frame-a {
+  animation: pet-frame-a 0.36s steps(1) infinite;
+}
+.pets-lobby .pet-dog .pet-frame-b, .pets-walk .pet .pet-frame-b, .pets-chase .pet .pet-frame-b {
+  animation: pet-frame-b 0.36s steps(1) infinite;
+}
+.pets-chase .pet .pet-frame-a, .pets-chase .pet .pet-frame-b { animation-duration: 0.2s; }
+@keyframes pet-frame-a { 50% { visibility: hidden; } }
+@keyframes pet-frame-b { 0% { visibility: hidden; } 50% { visibility: visible; } }
+
+/* The lobby: the dog trots up and down; the cat naps (a little flatter), with a z drifting up. */
+.pets-lobby .pet-dog, .pets-walk .pet-dog { animation: pet-trot 14s linear infinite; }
+.pets-walk .pet-cat { animation: pet-trot 18s linear infinite reverse; }
+.pets-lobby .pet-cat { transform: scaleY(0.82); transform-origin: bottom; }
+@keyframes pet-trot {
+  0% { transform: translateX(0) scaleX(1); }
+  48% { transform: translateX(var(--trot)) scaleX(1); }
+  50% { transform: translateX(var(--trot)) scaleX(-1); }
+  98% { transform: translateX(0) scaleX(-1); }
+  100% { transform: translateX(0) scaleX(1); }
+}
+.pet-zzz {
+  position: absolute;
+  right: 21.5rem;
+  bottom: 2.6rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 1rem;
+  color: var(--muted);
+  animation: pet-zzz 3s ease-out infinite;
+}
+@keyframes pet-zzz {
+  0% { transform: translate(0, 0); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: translate(0.75rem, -1.5rem); opacity: 0; }
+}
+
+/* A question: both sit still and face the screen (to their left). */
+.pets-watch .pet { transform: scaleX(-1); }
+
+/* A reveal: both hop, a beat apart. */
+.pets-hop .pet { animation: pet-hop 0.7s cubic-bezier(0.2, 0, 0, 1) infinite; }
+.pets-hop .pet-cat { animation-delay: 0.2s; }
+@keyframes pet-hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-1.25rem); } }
+
+/* The podium: the dog chases the cat across the lane, round and round. */
+.pets-chase .pet { left: 0; right: auto; animation: pet-chase 2.8s linear infinite; }
+.pets-chase .pet-cat { animation-delay: -0.9s; }
+@keyframes pet-chase {
+  from { transform: translateX(-5rem); }
+  to { transform: translateX(calc(var(--lane) + 1rem)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pets *, .pets { animation: none !important; }
+}

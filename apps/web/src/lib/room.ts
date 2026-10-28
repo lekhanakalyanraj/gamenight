@@ -1,7 +1,7 @@
 import type { AgeRating, HostLine, Room, RoomDisplay, RoomMember } from "@gamenight/db-types";
 
 /** What the lobby screens need from each table. Realtime events carry full rows, which fit these. */
-export type LobbyRoom = Pick<Room, "id" | "code" | "status" | "age_rating" | "max_players" | "voice">;
+export type LobbyRoom = Pick<Room, "id" | "code" | "status" | "age_rating" | "max_players" | "voice" | "pets">;
 export type LobbyMember = Pick<RoomMember, "id" | "user_id" | "nickname" | "role" | "joined_at" | "left_at" | "removed_by_host" | "topic" | "interests"
   | "topic_context" | "interests_context">;
 export type LobbyDisplay = Pick<RoomDisplay, "id" | "user_id" | "paired_at">;
@@ -11,7 +11,7 @@ export type LobbyClip = { line_id: string; path: string; created_at: string };
 
 // One literal string, so the Supabase client can infer the result type from it.
 export const LOBBY_SELECT =
-  "id, code, status, age_rating, max_players, voice, room_members(id, user_id, nickname, role, joined_at, left_at, removed_by_host, topic, interests, topic_context, interests_context), room_displays(id, user_id, paired_at), host_lines(id, kind, text, created_at)";
+  "id, code, status, age_rating, max_players, voice, pets, room_members(id, user_id, nickname, role, joined_at, left_at, removed_by_host, topic, interests, topic_context, interests_context), room_displays(id, user_id, paired_at), host_lines(id, kind, text, created_at)";
 
 export const MIN_PLAYERS = 3;
 
