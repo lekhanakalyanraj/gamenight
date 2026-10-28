@@ -9,8 +9,10 @@ import asyncio
 import contextlib
 import random
 import time
+import traceback
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -449,7 +451,7 @@ async def play_game(sb: Supabase, referee: Referee, host: Player, bots: list[Pla
     table = [host, *rng.sample(bots, rng.randint(min_players, max_players) - 1)]
     if kind == "quiz":  # a quiz has no stalling speaker; a player sitting a question out runs its timer instead
         staller = None
-        settings = {k: v for k, v in {"rounds": rng.choice([3, 4]), "seconds": rng.choice([10, 20]),
+        settings = {k: v for k, v in {"rounds": rng.choice([3, 5]), "seconds": rng.choice([10, 20]),
                                       "region": rng.choice(REGIONS)}.items() if v}
         report = GameReport(number, len(table), "quiz", False, settings)
     elif kind == "headsup":  # no stalling speaker either: the host cuts turns short, or the buzzer ends them
@@ -482,5 +484,7 @@ async def play_game(sb: Supabase, referee: Referee, host: Player, bots: list[Pla
     except Exception as error:  # a crash is a failed game with its reason, not the end of the run
         where = f" ({error.request.method} {error.request.url.path})" if isinstance(error, httpx.HTTPError) and \
             getattr(error, "_request", None) else ""
-        report.errors.append(f"{type(error).__name__}{where}: {error}")
+        last = traceback.extract_tb(error.__traceback__)[-1] if error.__traceback__ else None
+        at = f" at {Path(last.filename).name}:{last.lineno}" if last else ""
+        report.errors.append(f"{type(error).__name__}{where}{at}: {error}")
     return report

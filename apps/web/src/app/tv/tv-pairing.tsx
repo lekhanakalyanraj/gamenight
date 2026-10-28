@@ -92,19 +92,22 @@ export function TvPairing() {
   }, [router, supabase]);
 
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-10 p-10 text-center">
-      <p className="font-mono text-xl tracking-[0.4em] text-accent">GAMENIGHT</p>
-      <div className="flex flex-col items-center gap-4">
-        <p className="text-2xl text-muted">TV code</p>
-        <p data-testid="pairing-code" className="font-mono text-[14vw] leading-none tracking-[0.2em]">
+    <main className="flex min-h-dvh flex-col p-12">
+      <header className="flex items-baseline justify-between border-b border-border pb-4">
+        <span className="text-3xl tracking-tight">gamenight</span>
+        <span className="caps text-lg text-muted">TV · not connected</span>
+      </header>
+      <div className="flex flex-1 flex-col justify-center gap-8">
+        <p className="caps text-xl text-muted">TV code</p>
+        <p data-testid="pairing-code" className="numeral font-mono text-[15vw] tracking-[0.12em]">
           {code ?? "······"}
         </p>
+        <p className="max-w-4xl border-t border-border pt-6 text-3xl text-muted">
+          On the host&apos;s phone, open the room and choose <span className="text-foreground">Connect a TV</span>, then
+          enter this code.
+        </p>
+        {error ? <p role="alert" className="text-2xl text-danger">{error}</p> : null}
       </div>
-      <p className="max-w-3xl text-2xl text-muted">
-        On the host&apos;s phone, open the room and choose <span className="text-foreground">Connect a TV</span>, then
-        enter this code.
-      </p>
-      {error ? <p role="alert" className="text-xl text-danger">{error}</p> : null}
     </main>
   );
 }

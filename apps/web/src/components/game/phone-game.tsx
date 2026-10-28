@@ -1,10 +1,10 @@
 "use client";
 
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
-import { type ReactNode, useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 
 import { HostDrawer } from "@/components/game/host-drawer";
-import { Avatar, Elimination, HoldCard, PhaseTitle, TimerRing } from "@/components/game/parts";
+import { Avatar, Banner, Elimination, HoldCard, HowTo, PhaseTitle, PhoneHeading, Status, Timer } from "@/components/game/parts";
 import { FinalReveal } from "@/components/game/reveal";
 import { HostCaption } from "@/components/lobby";
 import { Button, Notice } from "@/components/ui";
@@ -64,16 +64,12 @@ export default function PhoneGame({ live, meId, isHost, onBackToLobby }: {
 
   return (
     <MotionConfig reducedMotion="user">
-      <main data-testid="phone-game" data-phase={game.phase} className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-5 py-6 pb-28">
-        <header className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm text-muted">{game.phase === "ended" ? "Undercover" : `Round ${Math.max(game.round, 1)}`}</p>
-            <h1 className="text-2xl font-semibold">{PHASE_LABEL[game.phase]}</h1>
-          </div>
-          {left !== null && !game.paused_at ? (
-            <TimerRing seconds={left} total={total} />
-          ) : null}
-        </header>
+      <main data-testid="phone-game" data-phase={game.phase} className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-5 py-6 pb-28">
+        <PhoneHeading
+          label={game.phase === "ended" ? "Undercover" : `Undercover · round ${Math.max(game.round, 1)}`}
+          title={PHASE_LABEL[game.phase]}
+          timer={left !== null && !game.paused_at ? <Timer seconds={left} total={total} /> : null}
+        />
 
         <HostCaption text={latestHostLine(live.hostLines)?.text ?? null} />
 
@@ -118,15 +114,12 @@ export default function PhoneGame({ live, meId, isHost, onBackToLobby }: {
         {game.phase !== "ended" && me ? <HoldCard card={card} /> : null}
 
         {game.phase !== "ended" ? (
-          <details className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm">
-            <summary className="cursor-pointer font-medium">How to play</summary>
-            <p className="mt-2 text-muted">{HOW_TO_PLAY[game.phase]}</p>
-          </details>
+          <HowTo><p>{HOW_TO_PLAY[game.phase]}</p></HowTo>
         ) : null}
 
-        {!live.connected ? <p role="status" className="text-center text-sm text-muted">Reconnecting…</p> : null}
+        {!live.connected ? <p role="status" className="caps text-xs text-muted">Reconnecting…</p> : null}
       </main>
-      {isHost && game.phase !== "ended" ? <HostDrawer game={game} roomId={live.room.id} voice={live.room.voice} /> : null}
+      {isHost && game.phase !== "ended" ? <HostDrawer game={game} roomId={live.room.id} voice={live.room.voice} pets={live.room.pets} /> : null}
     </MotionConfig>
   );
 }
@@ -155,13 +148,16 @@ function PhaseBody({ live, meId, names, moves, pending, isHost, onMove, onSettle
         return (
           <div data-testid="your-turn" className="flex flex-col gap-4">
             <motion.div
-              initial={{ scale: 0.8 }}
-              animate={{ scale: [0.8, 1.06, 1] }}
-              transition={{ duration: 0.5 }}
-              className="rounded-3xl bg-accent px-5 py-6 text-center text-accent-ink"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
+              className="flex flex-col gap-6 bg-accent px-5 py-6 text-accent-ink"
             >
-              <p className="text-3xl font-semibold">You&apos;re up</p>
-              <p className="mt-1">Say your clue out loud</p>
+              <p className="caps text-xs">Your turn</p>
+              <div>
+                <p className="text-5xl tracking-tight">You&apos;re up</p>
+                <p className="mt-2">Say your clue out loud</p>
+              </div>
             </motion.div>
             <Button className="h-14 text-lg" disabled={pending} onClick={() => onMove("done")}>Done</Button>
           </div>
@@ -199,14 +195,14 @@ function PhaseBody({ live, meId, names, moves, pending, isHost, onMove, onSettle
         return (
           <div className="flex flex-col gap-4">
             <motion.p
-              initial={{ scale: 2, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", stiffness: 300, damping: 15 }}
-              className={`text-center text-5xl font-semibold ${judgement.verdict ? "text-accent" : "text-danger"}`}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
+              className={`text-6xl tracking-tight ${judgement.verdict ? "text-ok" : "text-danger"}`}
             >
               {judgement.verdict ? "Right!" : "Wrong!"}
             </motion.p>
-            <p className="text-center text-muted">
+            <p className="text-muted">
               {judgement.settled ? "" : "The detective has ruled. The host can overrule."}
             </p>
             {isHost && !judgement.settled ? (
@@ -237,23 +233,24 @@ function VoteList({ candidates, names, progress, pending, onVote }: {
   const [picked, setPicked] = useState<string | null>(null);
   return (
     <div data-testid="vote" className="flex flex-col gap-3">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-lg font-medium">Who&apos;s hiding something?</h2>
-        <span className="text-sm text-muted">{progress}</span>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-xl">Who&apos;s hiding something?</h2>
+        <span className="caps text-xs text-muted">{progress}</span>
       </div>
-      <ul className="flex flex-col gap-2">
+      <ul className="flex flex-col border-t border-ink">
         {candidates.map((id) => (
           <li key={id}>
             <button
               type="button"
               aria-pressed={picked === id}
               onClick={() => setPicked(id)}
-              className={`flex h-14 w-full items-center gap-3 rounded-2xl border px-3 text-left transition ${
-                picked === id ? "border-accent bg-surface-2" : "border-border bg-surface"
+              className={`flex h-16 w-full items-center gap-4 border-b border-ink px-3 text-left transition ${
+                picked === id ? "bg-ink text-background" : "hover:bg-surface-2"
               }`}
             >
               <Avatar id={id} name={names.get(id) ?? "?"} size={36} />
-              <span className="flex-1 font-medium">{names.get(id)}</span>
+              <span className="flex-1 text-lg">{names.get(id)}</span>
+              <span aria-hidden className={`size-4 border ${picked === id ? "border-background bg-background" : "border-ink"}`} />
             </button>
           </li>
         ))}
@@ -276,30 +273,17 @@ function GuessBox({ pending, onGuess }: { pending: boolean; onGuess: (text: stri
         if (text.trim()) onGuess(text);
       }}
     >
-      <h2 className="text-2xl font-semibold">You were caught, Mr. White</h2>
+      <h2 className="text-3xl tracking-tight">You were caught, Mr. White</h2>
       <p className="text-muted">One guess at the civilians&apos; word. Guess right and you win.</p>
       <input
         aria-label="Your guess"
         value={text}
         maxLength={40}
         onChange={(e) => setText(e.target.value)}
-        className="h-12 rounded-xl border border-border bg-background px-3 text-lg outline-none focus:border-accent"
+        className="h-14 border border-ink bg-surface px-3 text-xl outline-none"
         autoComplete="off"
       />
       <Button type="submit" className="h-14 text-lg" disabled={pending || !text.trim()}>Guess</Button>
     </form>
   );
-}
-
-function Status({ title, children, tone }: { title: string; children?: ReactNode; tone?: "danger" }) {
-  return (
-    <div data-testid="status" className="flex flex-col gap-1 rounded-2xl border border-border bg-surface px-5 py-6 text-center">
-      <p className={`text-2xl font-semibold ${tone === "danger" ? "text-danger" : ""}`}>{title}</p>
-      {children ? <p className="text-muted">{children}</p> : null}
-    </div>
-  );
-}
-
-function Banner({ children }: { children: ReactNode }) {
-  return <p role="status" className="rounded-xl border border-accent/50 px-3 py-2 text-center text-accent">{children}</p>;
 }

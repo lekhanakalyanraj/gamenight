@@ -58,17 +58,20 @@ class QuizReferee:
         return False
 
     async def pick(self, game_id: str, s: dict[str, Any]) -> tuple[str, str | None] | None:
-        """This round's kind, from the topic of the player furthest behind who has questions for it."""
-        config = s["game"]["config"]
-        kind = config["round_kinds"][min(s["asked"] // config["per_round"], len(config["round_kinds"]) - 1)]
+        """A kind this round asks, from the topic of the player furthest behind who has questions for it."""
+        if not s.get("next"):
+            return None  # every question has been asked
+        kinds = list(s["next"]["kinds"])
+        self.r.rng.shuffle(kinds)
         bank = "select game_api.quiz_bank(%(game)s::uuid, %(topic)s, %(kind)s, null, 10)"
         for player in sorted(s["players"], key=lambda p: (p["points"], self.r.rng.random())):
             if player.get("topic"):
-                found = await self.r._fetch(bank, {"game": game_id, "topic": player["topic"].lower(), "kind": kind})
-                if found:
-                    return self.r.rng.choice(found)["id"], player["member_id"]
-        for any_kind in (kind, None):
-            found = await self.r._fetch(bank, {"game": game_id, "topic": None, "kind": any_kind})
+                for kind in kinds:
+                    found = await self.r._fetch(bank, {"game": game_id, "topic": player["topic"].lower(), "kind": kind})
+                    if found:
+                        return self.r.rng.choice(found)["id"], player["member_id"]
+        for kind in kinds:  # any topic; never another round's kind (the database refuses it)
+            found = await self.r._fetch(bank, {"game": game_id, "topic": None, "kind": kind})
             if found:
                 return self.r.rng.choice(found)["id"], None
         return None
@@ -98,7 +101,8 @@ def expected_points(question: dict[str, Any], answers: list[dict[str, Any]]) -> 
         return points
     for a in answers:
         if a["answer"] != key:
-            points[a["member_id"]] = 0
+            right_places = sum(x == y for x, y in zip(a["answer"].get("order", []), key.get("order", []), strict=False))
+            points[a["member_id"]] = 100 * right_places * (2 if a["joker"] else 1) if "order" in key else 0
             continue
         elapsed = Decimal(str((_at(a["answered_at"]) - _at(question["opened_at"])).total_seconds()))
         bonus = _round(500 * max(Decimal(0), 1 - elapsed / question["seconds"]))
@@ -118,7 +122,7 @@ def early_answer_lines(lines: list[dict[str, Any]], questions: list[dict[str, An
             if not (opened <= line["created_at"] < (revealed or "9999")):
                 continue
             text = line["text"]
-            if q["kind"] in ("choice", "picture") and "option" in key:
+            if q["kind"] in ("choice", "picture", "teaser", "lightning", "connect") and "option" in key:
                 right = q["options"][key["option"]]
                 if says(text, right) and not all(says(text, o) for o in q["options"]):
                     leaks.append(f"question {q['number']}: the host singled out the answer early: {text!r}")
@@ -158,7 +162,7 @@ async def play_quiz(game: Any, room: dict[str, Any]) -> tuple[dict[str, Any], li
     # Per question: answers (a few a moment), sometimes a timer run out, sometimes the reveal's 8 s hold; the AI
     # quiz master adds its own turns in agents mode.
     config = started.get("config") or {}
-    questions = config.get("rounds", 4) * config.get("per_round", 5)
+    questions = total_questions(config)
     per_question = 2.0 + 0.3 * len(game.table) + 0.15 * config.get("seconds", 20) + 1.5
     timeout = 60.0 + questions * per_question + (questions * 12.0 if game.agents is not None else 0)
     t0 = time.monotonic()
@@ -224,10 +228,21 @@ async def answer_some(game: Any, truth: dict[str, Any], skill: dict[str, float],
     return moved
 
 
+def total_questions(config: dict[str, Any]) -> int:
+    return sum(r["questions"] for r in config.get("plan", []))
+
+
 def pick_answer(truth: dict[str, Any], right: bool, rng: random.Random) -> dict[str, Any]:
     key = truth["key"]
-    if truth["kind"] == "true_false":
+    if truth["kind"] in ("true_false", "fake_real"):
         return {"value": key["value"] if right else not key["value"]}
+    if truth["kind"] == "order":
+        if right:
+            return {"order": key["order"]}
+        order = list(key["order"])
+        while order == key["order"]:
+            rng.shuffle(order)
+        return {"order": order}
     if truth["kind"] == "estimate":
         value = float(key["value"])
         return {"value": round(value * (rng.uniform(0.95, 1.05) if right else rng.uniform(0.5, 1.5)), 2)}
@@ -254,7 +269,7 @@ async def check_quiz(game: Any, room: dict[str, Any], g: dict[str, Any]) -> None
 
     answers = await sb.select(game.host.session, "quiz_answers", game_id=game.game_id)
     scores = await sb.select(game.tv.session, "quiz_scores", game_id=game.game_id)
-    total = g["config"]["rounds"] * g["config"]["per_round"]
+    total = total_questions(g["config"])
     if len(questions) != total or any(q["answer"] is None for q in questions):
         report.errors.append(f"{len(questions)} of {total} questions asked, not all revealed")
     for q in questions:

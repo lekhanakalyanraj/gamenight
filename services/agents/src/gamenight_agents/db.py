@@ -53,10 +53,11 @@ async def save_quiz_question(q: dict[str, Any]) -> str | None:
     async with await psycopg.AsyncConnection.connect(database_url(), autocommit=True) as conn:
         row = await (await conn.execute(
             "select agents_api.save_quiz_question(%s, %s, %s::smallint, %s::public.age_rating, %s, %s::jsonb, "
-            "%s::jsonb, %s, %s, %s)",
+            "%s::jsonb, %s, %s, %s, %s, %s::jsonb)",
             (q["topic"], q["kind"], q["difficulty"], q["rating"], q["prompt"],
              json.dumps(q["options"]) if q.get("options") is not None else None, json.dumps(q["answer"]),
-             q.get("unit"), q["source_url"], q["source_quote"]),
+             q.get("unit"), q.get("source_url"), q.get("source_quote"), q.get("hook"),
+             json.dumps(q["clues"]) if q.get("clues") is not None else None),
         )).fetchone()
     return str(row[0]) if row and row[0] else None
 

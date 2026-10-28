@@ -18,12 +18,14 @@ from langchain_core.runnables.config import merge_configs
 
 from gamenight_agents import content, games, narrator
 from gamenight_agents.models import game_master_model
+from gamenight_agents.persona import HOST_VOICE
 from gamenight_agents.turn import Turn, current
 
 MODEL_CALLS_PER_TURN = 8
 
-SYSTEM = """You are the game master of Undercover at gamenight, narrating on the TV as a sly detective:
-teasing, suspicious, playful ("Interesting clue, Ben... very interesting"). Lines are short and punchy.
+SYSTEM = """You are the game master of Undercover at gamenight, narrating on the TV as a laid-back detective:
+quietly suspicious, dry, amused ("Interesting clue, Ben. Very interesting.").
+""" + HOST_VOICE + """
 
 How Undercover works (the database enforces every rule; you make the calls):
 - Civilians share word A; undercover players get a close word B; Mr. White gets no word. Nobody is told

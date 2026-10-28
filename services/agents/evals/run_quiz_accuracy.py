@@ -29,7 +29,7 @@ from typing import Any
 
 import httpx
 
-from gamenight_agents import quiz_content
+from gamenight_agents import quiz_content, sources
 from gamenight_agents.leakcheck import says_number
 from gamenight_agents.models import GAME_MASTER_MODEL
 from gamenight_agents.quiz_content import Candidate, Verdict
@@ -41,7 +41,7 @@ RATING = "family"
 
 async def pass_everything(*_args) -> Verdict:
     return Verdict(supported=True, single_answer=True, unambiguous=True, lasting=True, fits_rating=True,
-                   reason="code-only run: no judge")
+                   reputable_source=True, reason="code-only run: no judge")
 
 
 def candidate(case: dict[str, Any]) -> Candidate:
@@ -66,36 +66,41 @@ async def check(http: httpx.AsyncClient, case: dict[str, Any], judge_fn) -> dict
 
 
 def answer_in_sentence(q: dict[str, Any]) -> bool:
-    """A cheap second look at a kept question: does its source sentence literally contain the keyed answer?"""
+    """A cheap second look at a kept question: does its source passage literally contain the keyed answer?"""
+    if not q.get("source_quote"):
+        return True  # a brain teaser: its answer is in the puzzle, and two blind solves reached it
     sentence = q["source_quote"].lower()
-    if q["kind"] == "choice":
+    if q["kind"] in ("choice", "lightning"):
         return q["options"][q["answer"]["option"]].lower() in sentence
     if q["kind"] == "estimate":
         return says_number(q["source_quote"], q["answer"]["value"])
-    return True  # true or false: the sentence may state the opposite, which is the point
+    return True  # fake or real may state the opposite; a link or an order is the judge's to check
 
 
 async def fresh(http: httpx.AsyncClient, topic: str) -> dict[str, Any]:
     need = {k: 2 for k in quiz_content.KINDS}
-    try:
-        reply = await quiz_content.write(topic, RATING, need)
+    try:  # web search when TAVILY_API_KEY is set, as in the lobby; Wikipedia otherwise
+        found = await sources.search(http, topic)
+        candidates = await quiz_content.generate(topic, RATING, need, found=found)
     except Exception as error:  # report-only: say what went wrong, don't stop the run
         return {"topic": topic, "candidates": 0, "kept": [], "dropped": [], "error": repr(error)}
-    candidates = quiz_content.parse_candidates(quiz_content._text(reply))
+    searched = f"web, {len(found)} pages" if found else "wikipedia"
     if not candidates:
-        return {"topic": topic, "candidates": 0, "kept": [], "dropped": [],
-                "error": "no usable candidates: " + quiz_content.why_empty(reply)}
+        return {"topic": topic, "candidates": 0, "kept": [], "dropped": [], "error": "no usable candidates",
+                "searched": searched}
     kept, dropped = [], []
     for c in candidates:
         try:
-            question, why = await quiz_content.verify(http, c, RATING)
+            question, why = await quiz_content.verify(http, c, RATING, found=found)
         except (httpx.HTTPError, ValueError) as error:
             question, why = None, f"couldn't check it: {error!r}"
+        if question and question["fun"] < quiz_content.FUN_BAR:
+            question, why = None, f"correct, but not much fun ({question['fun']}/5)"
         if question:
             kept.append(question | {"answer_in_sentence": answer_in_sentence(question)})
         else:
-            dropped.append({"prompt": c.prompt, "why": why})
-    return {"topic": topic, "candidates": len(candidates), "kept": kept, "dropped": dropped}
+            dropped.append({"kind": c.kind, "prompt": c.prompt, "why": why})
+    return {"topic": topic, "candidates": len(candidates), "kept": kept, "dropped": dropped, "searched": searched}
 
 
 def summary(results: list[dict[str, Any]], generated: list[dict[str, Any]], gated: bool, code_only: bool) -> str:
@@ -123,10 +128,12 @@ def summary(results: list[dict[str, Any]], generated: list[dict[str, Any]], gate
             lines += ["", f"### Fresh questions: {g['topic']}", "", f"Couldn't generate: {g['error'][:300]}"]
             continue
         lines += ["", f"### Fresh questions: {g['topic']}", "",
-                  f"{len(g['kept'])}/{g['candidates']} kept · {unsure} kept with the answer not literally in the "
-                  "sentence (check by hand)", ""]
-        lines += [f"- kept: {q['prompt']} → {json.dumps(q['answer'])} ({q['source_url']})" for q in g["kept"]]
-        lines += [f"- dropped: {d['prompt']} ({d['why'][:140]})" for d in g["dropped"]]
+                  f"{len(g['kept'])}/{g['candidates']} kept · searched {g.get('searched', 'wikipedia')} · {unsure} "
+                  "kept with the answer not literally in the sentence (check by hand)", ""]
+        lines += [f"- kept ({q['kind']}, fun {q['fun']}/5): {q['prompt']} → "
+                  f"{json.dumps(q['answer'], ensure_ascii=False)} ({q['source_url'] or 'a puzzle'})"
+                  + (f" · hook: {q['hook']}" if q.get("hook") else "") for q in g["kept"]]
+        lines += [f"- dropped ({d['kind']}): {d['prompt']} ({d['why'][:140]})" for d in g["dropped"]]
     return "\n".join(lines) + "\n"
 
 

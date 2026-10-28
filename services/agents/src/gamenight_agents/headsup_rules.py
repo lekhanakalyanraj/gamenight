@@ -74,15 +74,15 @@ async def step(turn: Turn, s: dict[str, Any], speak: Speaker | None = None) -> b
 
 def scripted_line(m: Moment) -> str:
     if m["kind"] == "turn_start":
-        opening = "Heads Up! " if m["first"] else ""
-        return f"{opening}Turn {m['turn']} of {m['of']}: {m['guesser']}, turn your back to the TV!"
+        opening = "Heads Up. " if m["first"] else ""
+        return f"{opening}Turn {m['turn']} of {m['of']}. {m['guesser']}, back to the TV."
     if m["kind"] == "streak":
-        return f"{m['streak']} in a row for {m['guesser']}! Keep it going!"
+        return f"{m['streak']} in a row for {m['guesser']}. Somebody stop them."
     if m["kind"] == "turn_end":
         if m["got"]:
-            return f"Time! {m['guesser']} got {m['got']}!"
-        return f"Time! Tough one, {m['guesser']}. Zero this round."
-    return f"That's Heads Up! {m['winner']} wins with {m['got']} got!"
+            return f"Time. {m['guesser']} got {m['got']}."
+        return f"Time. Tough one, {m['guesser']}. Zero this round."
+    return f"That's Heads Up. {m['winner']} takes it with {m['got']}."
 
 
 async def say_scripted(turn: Turn, moment: Moment, s: dict[str, Any]) -> None:

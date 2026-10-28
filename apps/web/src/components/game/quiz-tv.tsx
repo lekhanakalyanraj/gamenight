@@ -4,9 +4,10 @@ import type { QuizAnswer, QuizQuestion } from "@gamenight/db-types";
 import { motion, MotionConfig } from "motion/react";
 import { type ReactNode, useEffect, useState } from "react";
 
-import { Avatar, PhaseTitle, TimerRing } from "@/components/game/parts";
-import { AnswerTiles, Leaderboard, Podium, QuizPicture, usePlacesWhenAsked } from "@/components/game/quiz-parts";
+import { Avatar, PhaseTitle, StageHeading, Timer, TvFrame } from "@/components/game/parts";
+import { AnswerTiles, Clues, Leaderboard, OrderList, Podium, QuizPicture, usePlacesWhenAsked } from "@/components/game/quiz-parts";
 import { HostCaption } from "@/components/lobby";
+import BlurText from "@/components/react-bits/BlurText";
 import { useCountdown, useNow } from "@/lib/clock";
 import type { LiveGame } from "@/lib/game";
 import {
@@ -17,18 +18,20 @@ import {
   formatNumber,
   formatValue,
   isOpen,
-  KIND_HOW,
-  KIND_LABEL,
   kindOf,
   nextIsNewRound,
   nextRound,
+  ROUND_HOW,
+  ROUND_LABEL,
+  roundLabel,
   showingFinalReveal,
-  sourceTitle,
+  sourceLabel,
   standings,
   totalQuestions,
 } from "@/lib/quiz";
 import type { LiveRoom } from "@/lib/realtime";
 import { latestHostLine } from "@/lib/room";
+import { topicClass } from "@/lib/topics";
 import { useSupabase } from "@/lib/supabase/client";
 
 /**
@@ -54,62 +57,68 @@ export default function TvQuiz({ live }: { live: LiveRoom & { game: LiveGame } }
 
   return (
     <MotionConfig reducedMotion="user">
-      <main data-testid="quiz-tv" data-phase={game.phase} data-number={question?.number ?? 0}
-            className="grid min-h-dvh grid-cols-[minmax(0,3fr)_minmax(0,1fr)] gap-8 p-10">
-        <section className="flex min-w-0 flex-col gap-6">
-          <header className="flex items-center justify-between gap-6">
-            <div>
-              <p className="text-2xl text-muted">
-                {question && !ended ? `Round ${question.round} · ${KIND_LABEL[kindOf(question)]}` : "Quiz Night"}
-              </p>
-              <h1 className="text-6xl font-semibold">
-                {ended ? "Final scores" : question ? `Question ${question.number} of ${totalQuestions(game)}` : "Quiz Night"}
-              </h1>
-            </div>
-            {open && left !== null && !game.paused_at ? <TimerRing seconds={left} total={total} size={120} /> : null}
-          </header>
+      <TvFrame
+        data-testid="quiz-tv"
+        data-phase={game.phase}
+        data-number={question?.number ?? 0}
+        data-kind={question ? kindOf(question) : ""}
+        label={question && !ended ? `Quiz Night · ${roundLabel(game, question.number)}` : "Quiz Night"}
+        asideLabel="Standings"
+        caption={<HostCaption text={latestHostLine(live.hostLines)?.text ?? null} size="tv" />}
+        aside={
+          <>
+            <Leaderboard scores={scores} names={names} before={question?.revealed_at ? before : undefined} big
+                         count={!ended} />
+            {!live.connected ? <p role="status" className="caps mt-auto text-lg text-muted">Reconnecting…</p> : null}
+          </>
+        }
+      >
+        <StageHeading
+          label={ended ? "Game over" : question ? "Question" : "Up next"}
+          title={ended ? "Final scores" : question
+            ? <><span className="numeral text-[9rem]">{String(question.number).padStart(2, "0")}</span><span className="text-muted"> / {totalQuestions(game)}</span></>
+            : "Quiz Night"}
+          swap={`${ended}-${question?.number ?? 0}`}
+          timer={open && left !== null && !game.paused_at ? <Timer seconds={left} total={total} size={120} /> : null}
+        />
 
-          <div className="flex flex-1 flex-col justify-center">
-            {game.paused_at ? (
-              <Big title="Paused by the host">The quiz will pick up where it left off.</Big>
-            ) : (
-              <PhaseTitle id={`${view}-${question?.number ?? 0}`}
-                          className="flex w-full flex-col">
-                {ended ? (
-                  <FinalScores gameId={game.id} live={live.game} names={names} />
-                ) : intro ? (
-                  <RoundIntro {...nextRound(game, asked)} />
-                ) : !question.revealed_at ? (
-                  <QuestionStage question={question} names={names} open={open} answered={game.moves_in} playing={playing} />
-                ) : (
-                  <RevealStage question={question} names={names} />
-                )}
-              </PhaseTitle>
-            )}
-          </div>
-
-          <HostCaption text={latestHostLine(live.hostLines)?.text ?? null} size="tv" />
-        </section>
-
-        <aside className="flex flex-col gap-3">
-          <h2 className="text-2xl text-muted">Leaderboard</h2>
-          <Leaderboard scores={scores} names={names} before={question?.revealed_at ? before : undefined} big />
-          {!live.connected ? <p role="status" className="mt-auto text-xl text-muted">Reconnecting…</p> : null}
-        </aside>
-      </main>
+        <div className="flex flex-1 flex-col justify-center">
+          {game.paused_at ? (
+            <Big title="Paused by the host">The quiz will pick up where it left off.</Big>
+          ) : (
+            <PhaseTitle id={`${view}-${question?.number ?? 0}`}
+                        className="flex w-full flex-col">
+              {ended ? (
+                <FinalScores gameId={game.id} live={live.game} names={names} />
+              ) : intro ? (
+                <RoundIntro {...nextRound(game, asked)} />
+              ) : !question.revealed_at ? (
+                <QuestionStage question={question} names={names} open={open} answered={game.moves_in} playing={playing}
+                               now={now} />
+              ) : (
+                <RevealStage question={question} names={names} />
+              )}
+            </PhaseTitle>
+          )}
+        </div>
+      </TvFrame>
     </MotionConfig>
   );
 }
 
-function RoundIntro({ round, kind }: ReturnType<typeof nextRound>) {
+function RoundIntro({ round, name }: ReturnType<typeof nextRound>) {
   return (
-    <div data-testid="round-intro" className="flex flex-col items-center gap-5 text-center">
-      <motion.p initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: "spring", stiffness: 220, damping: 16 }} className="text-9xl font-semibold">
-        Round {round}
+    <div data-testid="round-intro" className="flex flex-col gap-6">
+      <motion.p initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, ease: [0.2, 0, 0, 1] }} className="flex items-baseline gap-8 text-7xl">
+        Round <span className="numeral text-[16rem]">{round}</span>
       </motion.p>
-      {kind ? <p className="text-5xl text-accent">{KIND_LABEL[kind]}</p> : null}
-      {kind ? <p className="max-w-3xl text-3xl text-muted">{KIND_HOW[kind]}</p> : null}
+      {name ? (
+        <p className="caps border-t border-border pt-6 text-3xl">
+          <BlurText text={ROUND_LABEL[name]} trigger="load" delay={80} stepDuration={0.3} blur={10} distance={14} />
+        </p>
+      ) : null}
+      {name ? <p className="max-w-3xl text-3xl text-muted">{ROUND_HOW[name]}</p> : null}
     </div>
   );
 }
@@ -118,44 +127,50 @@ function ForWhom({ question, names }: { question: QuizQuestion; names: Map<strin
   const name = question.for_member ? names.get(question.for_member) : null;
   if (!name || !question.for_member) return null;
   return (
-    <p className="flex items-center gap-3 self-start rounded-full bg-surface-2 py-2 pr-5 pl-2 text-2xl">
-      <Avatar id={question.for_member} name={name} size={40} />
-      This one&apos;s for {name}: {question.topic}
+    <p className="flex items-center gap-4 self-start text-2xl">
+      <Avatar id={question.for_member} name={name} size={44} live />
+      <span>This one&apos;s for {name} <span className="caps text-lg">· <span className={topicClass(question.topic)}>{question.topic}</span></span></span>
     </p>
   );
 }
 
-function QuestionStage({ question, names, open, answered, playing }: {
+function QuestionStage({ question, names, open, answered, playing, now }: {
   question: QuizQuestion;
   names: Map<string, string>;
   open: boolean;
   answered: number;
   playing: number;
+  now: number;
 }) {
-  const estimate = kindOf(question) === "estimate";
+  const kind = kindOf(question);
   return (
     <div data-testid="tv-question" className="flex flex-col gap-6">
       <ForWhom question={question} names={names} />
-      <h2 className="text-5xl leading-tight font-semibold">{question.prompt}</h2>
+      <h2 className={`${kind === "lightning" ? "text-7xl" : "text-6xl"} leading-[1.1] tracking-tight`}>
+        <BlurText key={question.number} text={question.prompt} trigger="load" delay={45} stepDuration={0.25} blur={8} distance={18} />
+      </h2>
       {question.image_path ? <QuizPicture question={question} big /> : null}
-      {estimate ? (
+      {kind === "connect" ? <Clues question={question} now={now} big /> : null}
+      {kind === "estimate" ? (
         <p className="text-4xl text-muted">Type your best guess{question.unit ? ` (${question.unit})` : ""} on your phone.</p>
+      ) : kind === "order" ? (
+        <OrderList question={question} big />
       ) : (
         <AnswerTiles question={question} big />
       )}
       {open ? (
-        <div data-testid="answered" className="flex items-center gap-4 text-3xl">
+        <div data-testid="answered" className="caps flex items-center gap-5 text-2xl text-muted">
           <span>{answered} of {playing} answered</span>
           <span className="flex gap-2">
             {Array.from({ length: playing }, (_, i) => (
-              <motion.span key={i} animate={{ scale: i < answered ? 1 : 0.6, opacity: i < answered ? 1 : 0.3 }}
-                           className="size-5 rounded-full bg-accent" />
+              <span key={i} className={`size-5 border border-ink transition-colors ${i < answered ? "bg-ink" : ""}`} />
             ))}
           </span>
         </div>
       ) : (
-        <motion.p initial={{ scale: 1.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-6xl font-semibold text-accent">
-          {answered >= playing ? "Everyone's in!" : "Time's up!"}
+        <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}
+                  className="caps text-4xl text-accent">
+          {answered >= playing ? "Everyone's in" : "Time's up"}
         </motion.p>
       )}
     </div>
@@ -164,36 +179,50 @@ function QuestionStage({ question, names, open, answered, playing }: {
 
 function RevealStage({ question, names }: { question: QuizQuestion; names: Map<string, string> }) {
   const results = question.results as ({ answered: number; right?: number } & Partial<EstimateResults>) | null;
-  const estimate = kindOf(question) === "estimate";
-  const source = sourceTitle(question.source_url);
+  const kind = kindOf(question);
+  const source = sourceLabel(question);
   return (
     <div data-testid="tv-reveal" className="flex flex-col gap-6">
       <h2 className="text-4xl leading-tight text-muted">{question.prompt}</h2>
-      {estimate ? (
-        <div className="flex flex-col items-center gap-4">
+      {kind === "connect" ? <Clues question={question} now={0} big /> : null}
+      {kind === "estimate" ? (
+        <div className="flex flex-col gap-6">
           <motion.p data-testid="quiz-answer" data-answer={answerText(question) ?? ""}
-                    initial={{ scale: 2.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                    transition={{ type: "spring", stiffness: 240, damping: 14 }} className="text-9xl font-semibold text-accent">
+                    initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, ease: [0.2, 0, 0, 1] }} className="numeral text-[12rem] text-ok">
             {answerText(question)}
           </motion.p>
           {results?.closest?.length ? (
-            <p className="text-4xl">
-              Closest: {results.closest.map((c) => `${names.get(c.member_id) ?? "?"} (${formatValue(Number(c.value), question.unit)})`).join(", ")}
+            <p className="border-t border-border pt-6 text-4xl">
+              <span className="caps text-2xl text-muted">Closest · </span>{results.closest.map((c) => `${names.get(c.member_id) ?? "?"} (${formatValue(Number(c.value), question.unit)})`).join(", ")}
             </p>
           ) : <p className="text-4xl text-muted">Nobody guessed.</p>}
         </div>
+      ) : kind === "order" ? (
+        <>
+          <span data-testid="quiz-answer" data-answer={answerText(question) ?? ""} className="sr-only">{answerText(question)}</span>
+          <OrderList question={question} big />
+          {results ? (
+            <p className="caps text-2xl text-muted">{results.right ?? 0} of {results.answered} got the whole order</p>
+          ) : null}
+        </>
       ) : (
         <>
-          <p className="text-5xl font-semibold">
-            <span data-testid="quiz-answer" data-answer={answerText(question) ?? ""} className="text-accent">{answerText(question)}</span>
+          <p className="flex items-baseline gap-6 text-7xl tracking-tight">
+            <span className="caps text-2xl text-muted">Answer</span>
+            <span data-testid="quiz-answer" data-answer={answerText(question) ?? ""} className="text-ok">{answerText(question)}</span>
           </p>
           <AnswerTiles question={question} big />
           {results ? (
-            <p className="text-3xl text-muted">{results.right ?? 0} of {results.answered} got it right</p>
+            <p className="caps text-2xl text-muted">{results.right ?? 0} of {results.answered} got it right</p>
           ) : null}
         </>
       )}
-      {source ? <p className="text-xl text-muted">Source: Wikipedia, {source}</p> : null}
+      {question.hook ? (
+        <motion.p data-testid="quiz-hook" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6, duration: 0.3 }}
+                  className="max-w-5xl border-l-2 border-accent pl-6 text-3xl leading-snug">{question.hook}</motion.p>
+      ) : null}
+      {source ? <p className="caps text-lg text-muted">{source}</p> : null}
     </div>
   );
 }
@@ -210,13 +239,13 @@ function FinalScores({ gameId, live, names }: { gameId: string; live: LiveGame; 
   return (
     <div data-testid="final-scores" className="flex flex-col gap-10">
       <Podium scores={live.scores} names={names} big />
-      <ul className="grid grid-cols-2 gap-x-10 gap-y-2 text-2xl">
+      <ul className="grid grid-cols-2 gap-x-12 border-t border-border text-2xl">
         {ranked.map((s) => (
-          <li key={s.member_id} data-testid="final-player" className="flex items-baseline gap-3">
+          <li key={s.member_id} data-testid="final-player" className="flex items-baseline gap-4 border-b border-border py-3">
             <span className="w-8 font-mono text-muted">{s.place}</span>
             <span className="flex-1 truncate">{names.get(s.member_id) ?? "?"}</span>
             <span className="font-mono">{formatNumber(s.points)}</span>
-            <span className="w-40 text-right text-lg text-muted">
+            <span className="caps w-48 text-right text-base text-muted">
               {(streaks.get(s.member_id) ?? 0) > 1 ? `best run: ${streaks.get(s.member_id)} right` : ""}
             </span>
           </li>
@@ -228,9 +257,9 @@ function FinalScores({ gameId, live, names }: { gameId: string; live: LiveGame; 
 
 function Big({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div data-testid="tv-status" className="flex flex-col items-center gap-4 text-center">
-      <p className="text-7xl font-semibold">{title}</p>
-      {children ? <p className="text-3xl text-muted">{children}</p> : null}
+    <div data-testid="tv-status" className="flex flex-col gap-5">
+      <p className="text-7xl leading-[1.05] tracking-tight">{title}</p>
+      {children ? <p className="max-w-4xl text-3xl text-muted">{children}</p> : null}
     </div>
   );
 }

@@ -5,8 +5,17 @@ import { motion, MotionConfig } from "motion/react";
 import { type ReactNode, useEffect, useState, useTransition } from "react";
 
 import { HostDrawer } from "@/components/game/host-drawer";
-import { PhaseTitle, TimerRing } from "@/components/game/parts";
-import { AnswerTiles, Leaderboard, Podium, QuizPicture, usePlacesWhenAsked } from "@/components/game/quiz-parts";
+import { Banner, HowTo, PhaseTitle, PhoneHeading, Status, Timer } from "@/components/game/parts";
+import {
+  AnswerTiles,
+  Clues,
+  Leaderboard,
+  OrderList,
+  OrderPicker,
+  Podium,
+  QuizPicture,
+  usePlacesWhenAsked,
+} from "@/components/game/quiz-parts";
 import { HostCaption } from "@/components/lobby";
 import { Button, Notice } from "@/components/ui";
 import { answerQuestion, playJoker } from "@/app/play/[code]/game-actions";
@@ -19,18 +28,21 @@ import {
   formatNumber,
   isOpen,
   type Key,
-  KIND_HOW,
-  KIND_LABEL,
   kindOf,
   nextIsNewRound,
   nextRound,
   pickText,
   placeOf,
+  ROUND_HOW,
+  ROUND_LABEL,
+  roundLabel,
   showingFinalReveal,
+  slotOf,
   totalQuestions,
 } from "@/lib/quiz";
 import { type LiveRoom, usePrivateGame } from "@/lib/realtime";
 import { latestHostLine } from "@/lib/room";
+import { topicClass } from "@/lib/topics";
 
 /** A phone during Quiz Night: the question, your answer, your result, and where you stand. */
 export default function PhoneQuiz({ live, meId, isHost, onBackToLobby }: {
@@ -59,7 +71,7 @@ export default function PhoneQuiz({ live, meId, isHost, onBackToLobby }: {
     if (revealedAt && unscored) void refetch();
   }, [revealedAt, unscored, refetch]);
 
-  function answer(value: { option: number } | { value: boolean | number }) {
+  function answer(value: { option: number } | { value: boolean | number } | { order: number[] }) {
     setError(undefined);
     const id = newId(); // made here, so a retried tap is the same answer
     startTransition(async () => {
@@ -75,6 +87,7 @@ export default function PhoneQuiz({ live, meId, isHost, onBackToLobby }: {
   }
 
   const asked = questions.length;
+  const roundName = question ? slotOf(game, question.number).name : null;
   const ended = game.phase === "ended" && !showingFinalReveal(game, question, now);
   const intro = !question || (game.phase === "reveal" && !game.phase_deadline && nextIsNewRound(game, asked));
   // The screen's key is what it shows, so the game ending under the last reveal doesn't replay it.
@@ -85,16 +98,12 @@ export default function PhoneQuiz({ live, meId, isHost, onBackToLobby }: {
   return (
     <MotionConfig reducedMotion="user">
       <main data-testid="quiz-phone" data-phase={game.phase} data-number={question?.number ?? 0}
-            className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-5 py-6 pb-28">
-        <header className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm text-muted">
-              {question && !ended ? `Round ${question.round} · ${KIND_LABEL[kindOf(question)]}` : "Quiz Night"}
-            </p>
-            <h1 className="text-2xl font-semibold">{heading}</h1>
-          </div>
-          {open && left !== null && !game.paused_at ? <TimerRing seconds={left} total={total} /> : null}
-        </header>
+            className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-5 py-6 pb-28">
+        <PhoneHeading
+          label={question && !ended ? roundLabel(game, question.number) : "Quiz Night"}
+          title={heading}
+          timer={open && left !== null && !game.paused_at ? <Timer seconds={left} total={total} /> : null}
+        />
 
         <HostCaption text={latestHostLine(live.hostLines)?.text ?? null} />
 
@@ -109,7 +118,7 @@ export default function PhoneQuiz({ live, meId, isHost, onBackToLobby }: {
           ) : intro ? (
             <RoundIntro {...nextRound(game, asked)} />
           ) : open ? (
-            <QuestionView question={question} names={names} mine={mine} pending={pending} onAnswer={answer}
+            <QuestionView question={question} names={names} mine={mine} pending={pending} onAnswer={answer} now={now}
                           joker={myScore && myScore.jokers > 0 && myScore.joker_on !== question.number && !mine ? joker : undefined}
                           jokerOn={myScore?.joker_on === question.number} />
           ) : !question.revealed_at ? (
@@ -124,39 +133,40 @@ export default function PhoneQuiz({ live, meId, isHost, onBackToLobby }: {
         <Notice>{error}</Notice>
 
         {game.phase !== "ended" ? (
-          <details className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm">
-            <summary className="cursor-pointer font-medium">How to play</summary>
-            <p className="mt-2 text-muted">{question ? KIND_HOW[kindOf(question)] : HOW_TO_PLAY.question}</p>
-            <p className="mt-2 text-muted">{HOW_TO_PLAY.reveal}</p>
-          </details>
+          <HowTo>
+            <p>{roundName ? ROUND_HOW[roundName] : HOW_TO_PLAY.question}</p>
+            <p>{HOW_TO_PLAY.reveal}</p>
+          </HowTo>
         ) : null}
 
-        {!live.connected ? <p role="status" className="text-center text-sm text-muted">Reconnecting…</p> : null}
+        {!live.connected ? <p role="status" className="caps text-xs text-muted">Reconnecting…</p> : null}
       </main>
-      {isHost && game.phase !== "ended" ? <HostDrawer game={game} roomId={live.room.id} voice={live.room.voice} /> : null}
+      {isHost && game.phase !== "ended" ? <HostDrawer game={game} roomId={live.room.id} voice={live.room.voice} pets={live.room.pets} /> : null}
     </MotionConfig>
   );
 }
 
-function RoundIntro({ round, kind }: { round: number; kind: ReturnType<typeof nextRound>["kind"] }) {
+function RoundIntro({ round, name }: ReturnType<typeof nextRound>) {
   return (
-    <div data-testid="round-intro" className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface px-5 py-6 text-center">
-      <p className="text-sm text-muted">Get ready</p>
-      <motion.p initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-3xl font-semibold">
-        Round {round}
+    <div data-testid="round-intro" className="flex flex-col gap-3 bg-ink px-5 py-6 text-background">
+      <p className="caps text-xs opacity-60">Get ready</p>
+      <motion.p initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.22 }}
+                className="flex items-baseline gap-3 text-3xl">
+        Round <span className="numeral text-8xl">{round}</span>
       </motion.p>
-      {kind ? <p className="text-lg">{KIND_LABEL[kind]}</p> : null}
-      {kind ? <p className="text-muted">{KIND_HOW[kind]}</p> : null}
+      {name ? <p className="caps text-sm">{ROUND_LABEL[name]}</p> : null}
+      {name ? <p className="opacity-70">{ROUND_HOW[name]}</p> : null}
     </div>
   );
 }
 
-function QuestionView({ question, names, mine, pending, onAnswer, joker, jokerOn }: {
+function QuestionView({ question, names, mine, pending, onAnswer, joker, jokerOn, now }: {
   question: QuizQuestion;
   names: Map<string, string>;
   mine: QuizAnswer | undefined;
   pending: boolean;
-  onAnswer: (value: { option: number } | { value: boolean | number }) => void;
+  onAnswer: (value: { option: number } | { value: boolean | number } | { order: number[] }) => void;
+  now: number;
   joker?: () => void;
   jokerOn: boolean;
 }) {
@@ -165,10 +175,13 @@ function QuestionView({ question, names, mine, pending, onAnswer, joker, jokerOn
   return (
     <div data-testid="question" className="flex flex-col gap-4">
       {forName ? (
-        <p className="self-start rounded-full bg-surface-2 px-3 py-1 text-sm">For {forName}: {question.topic}</p>
+        <p className="caps self-start border border-ink px-2 py-1 text-[11px]">
+          For {forName} · <span className={topicClass(question.topic)}>{question.topic}</span>
+        </p>
       ) : null}
-      <h2 className="text-xl font-semibold">{question.prompt}</h2>
+      <h2 className="text-2xl leading-snug">{question.prompt}</h2>
       {question.image_path ? <QuizPicture question={question} /> : null}
+      {kind === "connect" ? <Clues question={question} now={now} /> : null}
       {mine ? (
         <Status title="Answer in">
           You said {pickText(question, mine.answer as Key)}{mine.joker ? ", with your joker" : ""}. Waiting for the others.
@@ -180,10 +193,12 @@ function QuestionView({ question, names, mine, pending, onAnswer, joker, jokerOn
               Play your double-points joker on this one
             </Button>
           ) : null}
-          {jokerOn ? <p className="text-center text-sm text-accent">Joker on: this one counts double.</p> : null}
+          {jokerOn ? <p className="caps bg-accent px-3 py-2 text-xs text-accent-ink">Joker on: this one counts double</p> : null}
           {kind === "estimate"
             ? <EstimateBox unit={question.unit} pending={pending} onAnswer={(value) => onAnswer({ value })} />
-            : <AnswerTiles question={question} disabled={pending} onPick={onAnswer} />}
+            : kind === "order"
+              ? <OrderPicker question={question} pending={pending} onAnswer={(order) => onAnswer({ order })} />
+              : <AnswerTiles question={question} disabled={pending} onPick={onAnswer} />}
         </>
       )}
     </div>
@@ -203,8 +218,8 @@ function EstimateBox({ unit, pending, onAnswer }: { unit: string | null; pending
       <label className="flex items-center gap-3">
         <input aria-label="Your estimate" inputMode="decimal" value={text} maxLength={15} autoComplete="off"
                onChange={(e) => setText(e.target.value.replace(/[^\d.,-]/g, ""))}
-               className="h-14 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-2xl outline-none focus:border-accent" />
-        {unit ? <span className="text-lg text-muted">{unit}</span> : null}
+               className="numeral h-16 min-w-0 flex-1 border border-ink bg-surface px-3 text-4xl outline-none" />
+        {unit ? <span className="caps text-sm text-muted">{unit}</span> : null}
       </label>
       <Button type="submit" className="h-14 text-lg" disabled={pending || !valid}>Lock it in</Button>
     </form>
@@ -230,21 +245,24 @@ function RevealView({ question, mine, scores, names, meId, before }: {
     : mine.correct ? "Right!" : "Not this time";
   return (
     <div data-testid="reveal" className="flex flex-col gap-4">
-      <motion.div initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 16 }}
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
                   data-testid="my-result" data-correct={mine?.correct ?? undefined}
-                  className={`rounded-3xl px-5 py-6 text-center ${mine?.correct ? "bg-accent text-accent-ink" : "border border-border bg-surface"}`}>
-        <p className="text-4xl font-semibold">{title}</p>
+                  className={`flex flex-col gap-2 px-5 py-6 ${mine?.correct ? "bg-ok text-background" : "border border-ink"}`}>
+        <p className="text-5xl tracking-tight">{title}</p>
         {scored && mine.points ? (
-          <p className="mt-1 text-lg">+{formatNumber(mine.points)} points{mine.joker ? " (joker: doubled)" : ""}</p>
+          <p className="caps text-sm">+{formatNumber(mine.points)} points{mine.joker ? " · joker doubled" : ""}</p>
         ) : null}
       </motion.div>
-      <p className="text-center text-lg">
-        The answer: <span data-testid="the-answer" className="font-semibold">{answerText(question)}</span>
+      <p className="text-lg">
+        <span className="caps text-xs text-muted">The answer: </span>
+        <span data-testid="the-answer">{answerText(question)}</span>
       </p>
-      {kindOf(question) !== "estimate" ? <AnswerTiles question={question} picked={pickedOf(mine)} /> : null}
+      {kindOf(question) === "order" ? <OrderList question={question} />
+        : kindOf(question) !== "estimate" ? <AnswerTiles question={question} picked={pickedOf(mine)} /> : null}
+      {question.hook ? <p data-testid="quiz-hook" className="border-l-2 border-accent pl-3 text-muted">{question.hook}</p> : null}
       {place ? (
-        <p className="text-center text-muted">
+        <p className="text-muted">
           You&apos;re {ordinal(place)}{moved > 0 ? `, up ${moved}` : moved < 0 ? `, down ${-moved}` : ""}.
         </p>
       ) : null}
@@ -262,10 +280,10 @@ function FinalScores({ scores, names, meId, children }: {
   const place = placeOf(scores, meId);
   const mine = scores.find((s) => s.member_id === meId);
   return (
-    <div data-testid="final-scores" className="flex flex-col gap-5">
+    <div data-testid="final-scores" className="flex flex-col gap-6">
       <Podium scores={scores} names={names} />
       {place && mine ? (
-        <p className="text-center text-lg">You finished {ordinal(place)} with {formatNumber(mine.points)} points.</p>
+        <p className="text-xl">You finished {ordinal(place)} with {formatNumber(mine.points)} points.</p>
       ) : null}
       <Leaderboard scores={scores} names={names} meId={meId} />
       {children}
@@ -281,17 +299,4 @@ function pickedOf(mine: QuizAnswer | undefined): number | boolean | null {
 export function ordinal(n: number): string {
   const suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
   return `${n}${suffix}`;
-}
-
-function Status({ title, children }: { title: string; children?: ReactNode }) {
-  return (
-    <div data-testid="status" className="flex flex-col gap-1 rounded-2xl border border-border bg-surface px-5 py-6 text-center">
-      <p className="text-2xl font-semibold">{title}</p>
-      {children ? <p className="text-muted">{children}</p> : null}
-    </div>
-  );
-}
-
-function Banner({ children }: { children: ReactNode }) {
-  return <p role="status" className="rounded-xl border border-accent/50 px-3 py-2 text-center text-accent">{children}</p>;
 }

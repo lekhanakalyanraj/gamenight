@@ -25,7 +25,7 @@ export async function startGame(roomId: string, setup: GameSetup): Promise<{ err
     const cleanTheme = setup.theme?.trim().slice(0, 30);
     if (cleanTheme) settings.theme = cleanTheme;
   } else if (setup.kind === "quiz") {
-    if (![3, 4, 5].includes(setup.rounds) || ![10, 20, 30].includes(setup.seconds)) return BAD;
+    if (![3, 5, 8].includes(setup.rounds) || ![10, 20, 30].includes(setup.seconds)) return BAD;
     settings.rounds = setup.rounds;
     settings.seconds = setup.seconds;
   } else if (setup.kind === "heads_up") {
@@ -41,17 +41,23 @@ export async function startGame(roomId: string, setup: GameSetup): Promise<{ err
 }
 
 /**
- * A quiz answer: an option ({option}), true or false ({value: boolean}) or an estimate ({value: number}). The
- * server stamps the time; the phone makes the answer id, so a retried tap counts once.
+ * A quiz answer: an option ({option}), true or false / fake or real ({value: boolean}), an estimate ({value:
+ * number}) or an order ({order: the options' indexes, first to last}). The server stamps the time; the phone makes
+ * the answer id, so a retried tap counts once. The database checks it fits the question.
  */
 export async function answerQuestion(
   gameId: string,
-  answer: { option: number } | { value: boolean | number },
+  answer: { option: number } | { value: boolean | number } | { order: number[] },
   actionId: string,
 ): Promise<{ answer?: QuizAnswer; error?: string }> {
   if (!isUuid(gameId) || !isUuid(actionId)) return BAD;
-  let clean: { option: number } | { value: boolean | number };
-  if ("option" in answer) {
+  let clean: { option: number } | { value: boolean | number } | { order: number[] };
+  if ("order" in answer) {
+    const order = answer.order;
+    if (!Array.isArray(order) || order.length < 3 || order.length > 4
+        || [...order].sort().some((v, i) => v !== i)) return BAD;
+    clean = { order: [...order] };
+  } else if ("option" in answer) {
     if (!Number.isInteger(answer.option) || answer.option < 0 || answer.option > 3) return BAD;
     clean = { option: answer.option };
   } else if (typeof answer.value === "boolean" || (typeof answer.value === "number" && Number.isFinite(answer.value))) {
@@ -74,12 +80,24 @@ export async function playJoker(gameId: string): Promise<{ error?: string }> {
   return error ? { error: friendlyError(error) } : {};
 }
 
-/** Your topic for Quiz Night, picked in the lobby (the database checks its length and characters). */
-export async function setTopic(roomId: string, topic: string | null): Promise<{ error?: string }> {
+/** A player's description of what they're into: one line, up to 160 characters (the database cleans it too). */
+function cleanContext(context: string | null | undefined): string | null {
+  if (context !== null && context !== undefined && typeof context !== "string") return null;
+  const clean = context?.trim().replace(/\s+/g, " ").slice(0, 160) ?? "";
+  return clean.length >= 3 ? clean : null;
+}
+
+/**
+ * Your topic for Quiz Night, picked in the lobby, and how you'd describe it ("90s Bollywood songs and SRK films"):
+ * the question writer gets the description. The database checks both.
+ */
+export async function setTopic(roomId: string, topic: string | null, context?: string | null): Promise<{ error?: string }> {
   if (!isUuid(roomId) || (topic !== null && typeof topic !== "string")) return BAD;
   const clean = topic?.trim().replace(/\s+/g, " ").slice(0, 30) || null;
   const supabase = await createClient();
-  const { error } = await supabase.rpc("set_topic", { p_room_id: roomId, p_topic: clean ?? "" }); // "" clears it
+  const { error } = await supabase.rpc("set_topic", {
+    p_room_id: roomId, p_topic: clean ?? "", p_context: (clean && cleanContext(context)) || undefined, // "" clears it
+  });
   return error ? { error: friendlyError(error) } : {};
 }
 
@@ -135,6 +153,14 @@ export async function setVoice(roomId: string, on: boolean): Promise<{ error?: s
   return error ? { error: friendlyError(error) } : {};
 }
 
+/** The host switches the TV's pets (a dog and a cat along the bottom of the screen) on or off. */
+export async function setPets(roomId: string, on: boolean): Promise<{ error?: string }> {
+  if (!isUuid(roomId) || typeof on !== "boolean") return BAD;
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_pets", { p_room_id: roomId, p_on: on });
+  return error ? { error: friendlyError(error) } : {};
+}
+
 /** The host agrees with the AI's verdict on Mr. White's guess, or overrules it. */
 export async function settleVerdict(gameId: string, overrule: boolean): Promise<{ error?: string }> {
   if (!isUuid(gameId)) return BAD;
@@ -161,11 +187,13 @@ export async function headsupMove(
   return error ? { error: friendlyError(error) } : { turn: data ?? undefined };
 }
 
-/** Your Heads Up interests, up to three, picked in the lobby (the database checks each). */
-export async function setInterests(roomId: string, interests: string[]): Promise<{ error?: string }> {
+/** Your Heads Up interests, up to three, picked in the lobby, and how you'd describe them (the database checks each). */
+export async function setInterests(roomId: string, interests: string[], context?: string | null): Promise<{ error?: string }> {
   if (!isUuid(roomId) || !Array.isArray(interests) || interests.some((i) => typeof i !== "string")) return BAD;
   const clean = interests.map((i) => i.trim().replace(/\s+/g, " ").slice(0, 30)).filter(Boolean).slice(0, 3);
   const supabase = await createClient();
-  const { error } = await supabase.rpc("set_interests", { p_room_id: roomId, p_interests: clean });
+  const { error } = await supabase.rpc("set_interests", {
+    p_room_id: roomId, p_interests: clean, p_context: (clean.length && cleanContext(context)) || undefined,
+  });
   return error ? { error: friendlyError(error) } : {};
 }

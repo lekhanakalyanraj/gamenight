@@ -20,14 +20,14 @@ export function CreateRoomForm({ defaultNickname }: { defaultNickname: string })
   return (
     <form action={action} className="flex flex-col gap-4">
       <Field label="Your nickname in the game" name="nickname" defaultValue={state.values?.nickname ?? defaultNickname} maxLength={20} required />
-      <fieldset className="flex flex-col gap-1.5 text-sm">
-        <legend className="mb-1.5 text-muted">Age rating</legend>
-        <div className="grid grid-cols-3 gap-2">
+      <fieldset className="flex flex-col gap-2">
+        <legend className="caps mb-2 text-xs text-muted">Age rating</legend>
+        <div className="grid grid-cols-3 border border-ink">
           {RATINGS.map((r) => (
             <label
               key={r.value}
-              className={`flex cursor-pointer flex-col rounded-xl border px-3 py-2 ${
-                rating === r.value ? "border-accent bg-surface-2" : "border-border"
+              className={`flex cursor-pointer flex-col gap-1 border-ink px-3 py-3 [&:not(:last-child)]:border-r ${
+                rating === r.value ? "bg-ink text-background" : ""
               }`}
             >
               <input
@@ -38,15 +38,15 @@ export function CreateRoomForm({ defaultNickname }: { defaultNickname: string })
                 onChange={() => setRating(r.value)}
                 className="sr-only"
               />
-              <span className="font-medium">{r.label}</span>
-              <span className="text-xs text-muted">{r.hint}</span>
+              <span>{r.label}</span>
+              <span className="caps text-[11px] opacity-60">{r.hint}</span>
             </label>
           ))}
         </div>
       </fieldset>
       {rating === "adult" ? (
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="confirm_adult" required className="size-4 accent-accent" />
+        <label className="flex items-center gap-3 text-sm">
+          <input type="checkbox" name="confirm_adult" required className="size-4 accent-[var(--ink)]" />
           I&apos;m 18 or over, and every player must confirm the same when they join.
         </label>
       ) : null}

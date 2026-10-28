@@ -1,0 +1,3 @@
+# Accepted OSV-Scanner findings, each with its reason and an expiry: on that date the finding fails the scan again,
+# so it's looked at once more (a fix may be out by then).
+# None at the moment.

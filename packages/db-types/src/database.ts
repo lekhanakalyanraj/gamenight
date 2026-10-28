@@ -250,13 +250,13 @@ isOneToOne: false
                   ]
                 },"quiz_questions": {
                   Row: {
-                    "answer": Json | null,"difficulty": number,"for_member": string | null,"game_id": string,"image_credit": Json | null,"image_path": string | null,"kind": string,"number": number,"opened_at": string,"options": Json | null,"prompt": string,"results": Json | null,"revealed_at": string | null,"room_id": string,"round": number,"seconds": number,"source_url": string | null,"step": number,"topic": string,"unit": string | null
+                    "answer": Json | null,"clues": Json | null,"difficulty": number,"for_member": string | null,"game_id": string,"grounded": boolean | null,"hook": string | null,"image_credit": Json | null,"image_path": string | null,"kind": string,"number": number,"opened_at": string,"options": Json | null,"prompt": string,"results": Json | null,"revealed_at": string | null,"room_id": string,"round": number,"seconds": number,"source_url": string | null,"step": number,"topic": string,"unit": string | null
                   }
                   Insert: {
-                    "answer"?: Json | null,"difficulty": number,"for_member"?: string | null,"game_id": string,"image_credit"?: Json | null,"image_path"?: string | null,"kind": string,"number": number,"opened_at"?: string,"options"?: Json | null,"prompt": string,"results"?: Json | null,"revealed_at"?: string | null,"room_id": string,"round": number,"seconds": number,"source_url"?: string | null,"step": number,"topic": string,"unit"?: string | null
+                    "answer"?: Json | null,"clues"?: Json | null,"difficulty": number,"for_member"?: string | null,"game_id": string,"grounded"?: boolean | null,"hook"?: string | null,"image_credit"?: Json | null,"image_path"?: string | null,"kind": string,"number": number,"opened_at"?: string,"options"?: Json | null,"prompt": string,"results"?: Json | null,"revealed_at"?: string | null,"room_id": string,"round": number,"seconds": number,"source_url"?: string | null,"step": number,"topic": string,"unit"?: string | null
                   }
                   Update: {
-                    "answer"?: Json | null,"difficulty"?: number,"for_member"?: string | null,"game_id"?: string,"image_credit"?: Json | null,"image_path"?: string | null,"kind"?: string,"number"?: number,"opened_at"?: string,"options"?: Json | null,"prompt"?: string,"results"?: Json | null,"revealed_at"?: string | null,"room_id"?: string,"round"?: number,"seconds"?: number,"source_url"?: string | null,"step"?: number,"topic"?: string,"unit"?: string | null
+                    "answer"?: Json | null,"clues"?: Json | null,"difficulty"?: number,"for_member"?: string | null,"game_id"?: string,"grounded"?: boolean | null,"hook"?: string | null,"image_credit"?: Json | null,"image_path"?: string | null,"kind"?: string,"number"?: number,"opened_at"?: string,"options"?: Json | null,"prompt"?: string,"results"?: Json | null,"revealed_at"?: string | null,"room_id"?: string,"round"?: number,"seconds"?: number,"source_url"?: string | null,"step"?: number,"topic"?: string,"unit"?: string | null
                   }
                   Relationships: [
                     {
@@ -331,13 +331,13 @@ isOneToOne: false
                   ]
                 },"room_members": {
                   Row: {
-                    "adult_confirmed": boolean,"id": string,"interests": (string)[] | null,"joined_at": string,"left_at": string | null,"nickname": string,"removed_by_host": boolean,"role": Database["public"]['Enums']["member_role"],"room_id": string,"topic": string | null,"user_id": string
+                    "adult_confirmed": boolean,"id": string,"interests": (string)[] | null,"interests_context": string | null,"joined_at": string,"left_at": string | null,"nickname": string,"removed_by_host": boolean,"role": Database["public"]['Enums']["member_role"],"room_id": string,"topic": string | null,"topic_context": string | null,"user_id": string
                   }
                   Insert: {
-                    "adult_confirmed"?: boolean,"id"?: string,"interests"?: (string)[] | null,"joined_at"?: string,"left_at"?: string | null,"nickname": string,"removed_by_host"?: boolean,"role"?: Database["public"]['Enums']["member_role"],"room_id": string,"topic"?: string | null,"user_id": string
+                    "adult_confirmed"?: boolean,"id"?: string,"interests"?: (string)[] | null,"interests_context"?: string | null,"joined_at"?: string,"left_at"?: string | null,"nickname": string,"removed_by_host"?: boolean,"role"?: Database["public"]['Enums']["member_role"],"room_id": string,"topic"?: string | null,"topic_context"?: string | null,"user_id": string
                   }
                   Update: {
-                    "adult_confirmed"?: boolean,"id"?: string,"interests"?: (string)[] | null,"joined_at"?: string,"left_at"?: string | null,"nickname"?: string,"removed_by_host"?: boolean,"role"?: Database["public"]['Enums']["member_role"],"room_id"?: string,"topic"?: string | null,"user_id"?: string
+                    "adult_confirmed"?: boolean,"id"?: string,"interests"?: (string)[] | null,"interests_context"?: string | null,"joined_at"?: string,"left_at"?: string | null,"nickname"?: string,"removed_by_host"?: boolean,"role"?: Database["public"]['Enums']["member_role"],"room_id"?: string,"topic"?: string | null,"topic_context"?: string | null,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -350,13 +350,13 @@ isOneToOne: false
                   ]
                 },"rooms": {
                   Row: {
-                    "age_rating": Database["public"]['Enums']["age_rating"],"closed_at": string | null,"code": string,"created_at": string,"host_id": string,"id": string,"max_players": number,"status": Database["public"]['Enums']["room_status"],"voice": boolean
+                    "age_rating": Database["public"]['Enums']["age_rating"],"closed_at": string | null,"code": string,"created_at": string,"host_id": string,"id": string,"max_players": number,"pets": boolean,"status": Database["public"]['Enums']["room_status"],"voice": boolean
                   }
                   Insert: {
-                    "age_rating"?: Database["public"]['Enums']["age_rating"],"closed_at"?: string | null,"code": string,"created_at"?: string,"host_id": string,"id"?: string,"max_players"?: number,"status"?: Database["public"]['Enums']["room_status"],"voice"?: boolean
+                    "age_rating"?: Database["public"]['Enums']["age_rating"],"closed_at"?: string | null,"code": string,"created_at"?: string,"host_id": string,"id"?: string,"max_players"?: number,"pets"?: boolean,"status"?: Database["public"]['Enums']["room_status"],"voice"?: boolean
                   }
                   Update: {
-                    "age_rating"?: Database["public"]['Enums']["age_rating"],"closed_at"?: string | null,"code"?: string,"created_at"?: string,"host_id"?: string,"id"?: string,"max_players"?: number,"status"?: Database["public"]['Enums']["room_status"],"voice"?: boolean
+                    "age_rating"?: Database["public"]['Enums']["age_rating"],"closed_at"?: string | null,"code"?: string,"created_at"?: string,"host_id"?: string,"id"?: string,"max_players"?: number,"pets"?: boolean,"status"?: Database["public"]['Enums']["room_status"],"voice"?: boolean
                   }
                   Relationships: [
                     
@@ -420,6 +420,7 @@ isOneToOne: false
 "host_id": string,
 "id": string,
 "max_players": number,
+"pets": boolean,
 "status": Database["public"]['Enums']["room_status"],
 "voice": boolean
             }
@@ -530,6 +531,7 @@ isOneToOne: false
               "adult_confirmed": boolean,
 "id": string,
 "interests": (string)[] | null,
+"interests_context": string | null,
 "joined_at": string,
 "left_at": string | null,
 "nickname": string,
@@ -537,6 +539,7 @@ isOneToOne: false
 "role": Database["public"]['Enums']["member_role"],
 "room_id": string,
 "topic": string | null,
+"topic_context": string | null,
 "user_id": string
             }
                           SetofOptions: {
@@ -655,10 +658,11 @@ isOneToOne: false
         isSetofReturn: false
       } },
 "set_interests":
-{ Args: { "p_interests": (string)[],"p_room_id": string }; Returns: {
+{ Args: { "p_context"?: string,"p_interests": (string)[],"p_room_id": string }; Returns: {
               "adult_confirmed": boolean,
 "id": string,
 "interests": (string)[] | null,
+"interests_context": string | null,
 "joined_at": string,
 "left_at": string | null,
 "nickname": string,
@@ -666,6 +670,7 @@ isOneToOne: false
 "role": Database["public"]['Enums']["member_role"],
 "room_id": string,
 "topic": string | null,
+"topic_context": string | null,
 "user_id": string
             }
                           SetofOptions: {
@@ -674,11 +679,15 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"set_pets":
+{ Args: { "p_on": boolean,"p_room_id": string }; Returns: undefined
+                           },
 "set_topic":
-{ Args: { "p_room_id": string,"p_topic": string }; Returns: {
+{ Args: { "p_context"?: string,"p_room_id": string,"p_topic": string }; Returns: {
               "adult_confirmed": boolean,
 "id": string,
 "interests": (string)[] | null,
+"interests_context": string | null,
 "joined_at": string,
 "left_at": string | null,
 "nickname": string,
@@ -686,6 +695,7 @@ isOneToOne: false
 "role": Database["public"]['Enums']["member_role"],
 "room_id": string,
 "topic": string | null,
+"topic_context": string | null,
 "user_id": string
             }
                           SetofOptions: {

@@ -75,7 +75,7 @@ async def step(turn: Turn, s: dict[str, Any]) -> bool:
         case "vote" if not g["resolved"] and g["phase_deadline"] is None:
             result = await games.resolve_vote(game, turn.key("resolve"))
             if result.get("tie"):
-                await say(turn, "A tie! The detective narrows their eyes.", s)
+                await say(turn, "A tie. The detective narrows their eyes.", s)
             else:
                 await say(turn, f"{names[result['eliminated']]} is out. They were {result['role'].replace('_', ' ')}.",
                           await games.state(game))
@@ -90,7 +90,7 @@ async def step(turn: Turn, s: dict[str, Any]) -> bool:
             verdict = same_word(s["guess"], s["words"]["civilian"])
             await games.judge(game, verdict, "Exactly the word." if verdict else "Not the word.", turn.key("judge"))
         case "guess" if g["resolved"]:
-            await say(turn, "Wrong! The game goes on.", s)
+            await say(turn, "Wrong. The game goes on.", s)
             await games.open_phase(game, "clues", None, turn.key("open"))
         case _:
             return False  # the players', the host's or the timer's move

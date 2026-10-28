@@ -11,11 +11,6 @@ import type { TvCard } from "@/lib/realtime";
 export type HeadsupConfig = { turns: number; seconds: number; ready_seconds: number; recap_seconds: number; total_turns: number };
 export type RecapCard = { card: string; result: "got" | "pass" | null };
 
-export const INTERESTS = [
-  "Movies", "Bollywood", "Cricket", "Food", "Animals", "Music", "Sports", "Places", "Famous people", "Science",
-  "TV & cartoons",
-];
-
 export function headsupConfig(game: Game): HeadsupConfig {
   const c = game.config as Partial<HeadsupConfig>;
   return { turns: c.turns ?? 1, seconds: c.seconds ?? 60, ready_seconds: c.ready_seconds ?? 5,

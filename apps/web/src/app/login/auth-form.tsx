@@ -32,7 +32,7 @@ export function AuthForm({ next }: { next: string }) {
       </Button>
       <button
         type="button"
-        className="text-sm text-muted underline-offset-4 hover:underline"
+        className="self-start text-sm text-muted underline-offset-4 hover:text-foreground hover:underline"
         onClick={() => setMode(mode === "in" ? "up" : "in")}
       >
         {mode === "in" ? "New here? Create a host account" : "Already hosting? Sign in"}

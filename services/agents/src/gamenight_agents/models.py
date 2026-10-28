@@ -14,8 +14,8 @@ HOST_MODEL = "claude-haiku-4-5-20251001"
 # in the full eval suite, and the model changes only if the numbers say so.
 GAME_MASTER_MODEL = "claude-haiku-4-5-20251001"
 
-FAKE_WELCOME = "Welcome to the room! Grab a seat, the games start soon."
-FAKE_CHAT_REPLY = "I'm your AI host! With this many players, Undercover is a great first game."
+FAKE_WELCOME = "Welcome in. Grab a seat, games start soon."
+FAKE_CHAT_REPLY = "Hey. With this many players, Undercover's a solid first game."
 
 
 class ScriptedChatModel(BaseChatModel):
@@ -59,7 +59,8 @@ def chat_model() -> BaseChatModel:
         return ScriptedChatModel(reply=FAKE_CHAT_REPLY)
     from langchain_anthropic import ChatAnthropic
 
-    return ChatAnthropic(model=HOST_MODEL, max_tokens=400, temperature=0.5, max_retries=2, timeout=30)
+    # Streamed: the host's reply reaches the phone token by token (the web proxy passes the stream through).
+    return ChatAnthropic(model=HOST_MODEL, max_tokens=400, temperature=0.5, max_retries=2, timeout=30, streaming=True)
 
 
 def _anthropic(model: str, **kwargs) -> BaseChatModel:

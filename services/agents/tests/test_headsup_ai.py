@@ -43,7 +43,7 @@ def bank(monkeypatch):
 
 
 def test_only_cards_the_review_keeps_are_saved_under_the_interest(monkeypatch, bank):
-    async def write(interest, rating, region, wanted, callbacks=None):
+    async def write(interest, rating, region, wanted, callbacks=None, context=None):
         return ["Elephant", "My neighbour Raj", "Giraffe", "Platypus"]
 
     async def review(interest, cards, rating, region, callbacks=None):
@@ -102,7 +102,7 @@ def test_a_turn_end_comes_with_that_turns_public_cards_and_a_streak_is_called_mi
     streak = {"kind": "streak", "payload": {"guesser": "m-asha", "streak": 3, "got": 3}}
     asyncio.run(headsup_rules.step(turn([streak]), state("guessing"), speak))
     assert heard[-1] == {"kind": "streak", "guesser": "Asha", "streak": 3, "got": 3}
-    assert headsup_rules.scripted_line(heard[-1]) == "3 in a row for Asha! Keep it going!"
+    assert headsup_rules.scripted_line(heard[-1]) == "3 in a row for Asha. Somebody stop them."
 
 
 class FakeModel:
@@ -155,7 +155,7 @@ def test_a_model_failure_falls_back_to_the_scripted_line(monkeypatch, said):
     model = FakeModel([TimeoutError("slow")])
     monkeypatch.setattr(headsup_commentator, "game_master_model", lambda: model)
     asyncio.run(headsup_commentator.speak(turn(), MOMENT, state("guessing")))
-    assert said == ["3 in a row for Asha! Keep it going!"]
+    assert said == ["3 in a row for Asha. Somebody stop them."]
 
 
 def test_the_region_is_named_for_the_model():

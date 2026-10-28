@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
-import { Geist, Geist_Mono } from "next/font/google";
+import { IBM_Plex_Mono, Inter } from "next/font/google";
 import "./globals.css";
 
 import { serverEnv } from "@/lib/env";
 import { SupabaseProvider } from "@/lib/supabase/client";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+// Inter at 100 and 300 stands in for teenage engineering's te-20 (the design reference's own suggestion); next/font
+// serves both from this origin, so the strict font-src 'self' CSP holds.
+const inter = Inter({ variable: "--font-inter", subsets: ["latin"], weight: ["100", "300", "400"] });
+const plexMono = IBM_Plex_Mono({ variable: "--font-plex-mono", subsets: ["latin"], weight: ["300", "400"] });
 
 export const metadata: Metadata = {
   title: "gamenight",
@@ -19,7 +21,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   await connection();
   const env = serverEnv();
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="en" className={`${inter.variable} ${plexMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col font-sans">
         <SupabaseProvider url={env.browserSupabaseUrl} publishableKey={env.supabaseKey}>
           {children}

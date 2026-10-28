@@ -1,5 +1,7 @@
 import { type Browser, devices, expect, type Page, test } from "@playwright/test";
 
+import { expectAccessible } from "./a11y";
+
 // Slice 1's "done when": a TV and five phones share one live lobby, from pairing to closing.
 
 async function newPhone(browser: Browser) {
@@ -55,6 +57,14 @@ test("a TV and five phones share one live lobby", async ({ browser }) => {
   const joinUrl = (await tv.getByTestId("join-qr").getAttribute("data-join-url")) ?? "";
   expect(joinUrl).toMatch(new RegExp(`/join\\?code=${roomCode}$`));
 
+  // The TV's pets: napping and trotting in the lobby, gone when the host switches them off, back when it's on.
+  await expect(tv.getByTestId("pets")).toHaveAttribute("data-mood", "lobby");
+  await host.page.getByTestId("pets-switch").click();
+  await expect(tv.getByTestId("pets")).toHaveCount(0);
+  await host.page.getByTestId("pets-switch").click();
+  await expect(tv.getByTestId("pets")).toBeVisible();
+  await tv.screenshot({ path: test.info().outputPath("tv-lobby.png") });
+
   // Four guests follow the address in the TV's QR code.
   const names = ["Asha", "Ben", "Chen", "Dara"];
   const guests: Array<Awaited<ReturnType<typeof newPhone>> & { name: string }> = [];
@@ -80,6 +90,11 @@ test("a TV and five phones share one live lobby", async ({ browser }) => {
   await expect(hostLine).toBeVisible({ timeout: 30_000 });
   await expect(hostLine).toContainText("AI host");
   await expect(asha.page.getByTestId("host-line")).toHaveText(((await hostLine.textContent()) ?? "").trim());
+
+  // The full lobby meets WCAG 2.2 AA on the TV, the host's phone and a player's phone.
+  await expectAccessible(tv, "the TV lobby");
+  await expectAccessible(host.page, "the host's lobby");
+  await expectAccessible(asha.page, "a player's lobby");
 
   // Dara's phone drops off: she stays in the room, and the TV dims her tile.
   await dara.context.close();

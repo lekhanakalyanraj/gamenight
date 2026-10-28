@@ -347,10 +347,20 @@ def test_the_quiz_masters_briefing_never_carries_a_live_answer():
     from gamenight_agents import quiz_master
 
     state = {"game": {"phase": "question", "step": 4, "round": 1, "phase_deadline": "2099-01-01", "paused": False,
-                      "resolved": False, "config": {"rounds": 3, "per_round": 5, "seconds": 20, "round_kinds": []}},
+                      "resolved": False, "config": {"rounds": 3, "seconds": 20, "plan": []}},
              "asked": 2, "total": 15, "age_rating": "family", "players": [],
              "question": {**LIVE, "number": 2, "prompt": "Capital of Australia?", "answer": None}}
     text = quiz_master.briefing([], state)
     assert '"key"' not in text and '"option": 2' not in text
     revealed = {**state, "question": {**state["question"], "revealed_at": "now", "answer": {"option": 2}}}
     assert '"answer": {"option": 2}' in quiz_master.briefing([], revealed)  # public once revealed
+
+
+def test_a_line_reading_the_items_in_their_right_order_gives_an_order_question_away():
+    question = {"kind": "order", "options": ["Sholay", "Lagaan", "Mughal-e-Azam"], "key": {"order": [2, 0, 1]},
+                "revealed_at": None}
+    assert leakcheck.quiz_answer_leaks("Mughal-e-Azam, then Sholay, then Lagaan?", question)
+    assert not leakcheck.quiz_answer_leaks("Sholay, Lagaan or Mughal-e-Azam: oldest first!", question)
+    lightning = {"kind": "lightning", "options": ["Fruit", "Vegetable"], "key": {"option": 0}, "revealed_at": None}
+    assert leakcheck.quiz_answer_leaks("It's a fruit!", lightning)
+    assert not leakcheck.quiz_answer_leaks("Fruit or vegetable? Quick!", lightning)

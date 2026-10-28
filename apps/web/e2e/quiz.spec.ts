@@ -1,5 +1,7 @@
 import { type Browser, type BrowserContext, devices, expect, type Locator, type Page, test } from "@playwright/test";
 
+import { expectAccessible } from "./a11y";
+
 // Slice 5c's "done when": a TV and five phones play a whole Quiz Night on the scripted quiz master (the same
 // pipeline as production: dispatcher, Agent Server, narrator), every phone answering from its own screen, and
 // no screen learns an answer before its reveal: not in what it shows, and not in what Realtime sends it.
@@ -117,8 +119,10 @@ test("a TV and five phones play a whole quiz, and no answer shows before its rev
     phones.push(guest);
   }
 
-  // Topics: four pick one (a chip, or typed), one doesn't; the TV shows each next to its player.
+  // Topics: four pick one (a chip, or typed), one doesn't; the TV shows each next to its player. Priya says more
+  // about hers first, and it's saved with the pick.
   const topics: Record<string, string> = { Priya: "Cricket", Asha: "Geography", Ben: "Science", Chen: "music & film" };
+  await host.page.getByLabel("Say more about your topic (optional)").fill("IPL, the Dhoni years");
   for (const phone of phones) {
     const topic = topics[phone.name];
     if (!topic) continue;
@@ -131,11 +135,14 @@ test("a TV and five phones play a whole quiz, and no answer shows before its rev
     await expect(phone.page.getByTestId("my-topic")).toHaveText(topic);
   }
   await expect(tv.getByTestId("player-topic")).toHaveCount(4);
+  await expect(host.page.getByRole("button", { name: "Saved", exact: true })).toBeVisible();
+  await expectAccessible(host.page, "a phone's lobby with topics picked (their colours)");
+  await expectAccessible(tv, "the TV's lobby with topics picked");
 
-  // The host picks Quiz Night: 3 rounds (multiple choice, pictures, estimates), 10 seconds a question.
-  await host.page.getByRole("tab", { name: "Quiz Night" }).click();
+  // The host picks a short Quiz Night (brain teasers, fake or real, connections), 10 seconds a question.
+  await host.page.getByRole("radio", { name: "Quiz Night" }).click();
   await expect(host.page.getByText("4 of 5 picked a topic.", { exact: false })).toBeVisible();
-  await host.page.getByRole("button", { name: "3", exact: true }).click();
+  await host.page.getByRole("button", { name: "Short", exact: true }).click();
   await host.page.getByRole("button", { name: "10 seconds" }).click();
   await host.page.getByRole("button", { name: "Start Quiz Night" }).click();
   await expect(tv.getByTestId("quiz-tv")).toBeVisible({ timeout: 30_000 });
@@ -144,10 +151,12 @@ test("a TV and five phones play a whole quiz, and no answer shows before its rev
   const seenBefore = new Map<number, string[]>(); // question number -> screen text while it was open
   const answers = new Map<number, string>(); // question number -> the answer the TV revealed
   const kinds = new Map<number, string>();
-  let pictureShown = false;
+  const cluesSeen = new Set<number>(); // how many connections clues were showing, each time we looked
+  let hookShown = false;
   let paused = false;
   let reloaded = false;
   let jokerPlayed = false;
+  let checkedQuestion = false;
 
   const deadline = Date.now() + 420_000;
   // Until the podium: the game ends the moment the last question is revealed, and its answer shows first.
@@ -157,22 +166,30 @@ test("a TV and five phones play a whole quiz, and no answer shows before its rev
     const number = Number(await tv.getByTestId("quiz-tv").getAttribute("data-number", { timeout: 2_000 }).catch(() => 0));
     const tvReveal = tv.getByTestId("tv-reveal");
 
+    // Once, on an open question: the TV and a phone meet WCAG 2.2 AA mid-game.
+    if (!checkedQuestion && await tv.getByTestId("tv-question").isVisible() && await phones[1].page.getByTestId("question").isVisible()) {
+      checkedQuestion = true;
+      await expectAccessible(tv, "the TV's question");
+      await expectAccessible(phones[1].page, "a phone's question");
+    }
+
     if (await tvReveal.isVisible()) {
       const answer = await tv.getByTestId("quiz-answer").first().getAttribute("data-answer", { timeout: 2_000 })
         .catch(() => null);
       if (answer && !answers.has(number)) answers.set(number, answer);
+      if (await tv.getByTestId("quiz-hook").isVisible()) hookShown = true;
     } else if (await tv.getByTestId("tv-question").isVisible()) {
       // Before its reveal, nothing on any screen marks the right answer.
       const texts = seenBefore.get(number) ?? [];
       texts.push(await openText(tv));
       // (Within the question itself: as it animates out, the reveal is already rendering beside it.)
       expect(await tv.getByTestId("tv-question").locator("[data-correct]").count(), "the TV marked an answer before the reveal").toBe(0);
-      if (await tv.getByTestId("quiz-picture").isVisible()) {
-        expect(await tv.getByTestId("quiz-picture").getAttribute("src", { timeout: 2_000 }).catch(() => "blob:")).toMatch(/^blob:/);
-        pictureShown = true;
+      if (await tv.getByTestId("clues").isVisible()) {
+        const shown = Number(await tv.getByTestId("clues").getAttribute("data-shown", { timeout: 2_000 }).catch(() => 0));
+        if (shown) cluesSeen.add(shown);
       }
-      const header = await tv.locator("header p").first().innerText({ timeout: 2_000 }).catch(() => "");
-      if (header) kinds.set(number, header.split("·").pop()?.trim() ?? "");
+      const kind = await tv.getByTestId("quiz-tv").getAttribute("data-kind", { timeout: 2_000 }).catch(() => "");
+      if (kind) kinds.set(number, kind);
       seenBefore.set(number, texts);
     }
 
@@ -207,6 +224,13 @@ test("a TV and five phones play a whole quiz, and no answer shows before its rev
       if (await page.getByTestId("estimate").isVisible()) {
         await page.getByLabel("Your estimate").fill(name === "Dara" ? "3" : "7");
         await tapIfShown(page.getByRole("button", { name: "Lock it in" }));
+      } else if (await page.getByTestId("order-picker").isVisible()) {
+        const items = page.getByTestId("order-item");
+        for (let i = 0; i < await items.count(); i++) await tapIfShown(items.nth(i));
+        await tapIfShown(page.getByRole("button", { name: "Lock it in" }));
+      } else if (name === "Asha" && await page.getByTestId("clues").isVisible()
+                 && Number(await page.getByTestId("clues").getAttribute("data-shown", { timeout: 2_000 }).catch(() => 0)) < 3) {
+        continue; // Asha waits for more clues, so the clues get a chance to drop one by one
       } else {
         const tiles = page.getByTestId("answer-tile");
         const count = await tiles.count();
@@ -230,6 +254,8 @@ test("a TV and five phones play a whole quiz, and no answer shows before its rev
     const line = await phone.page.getByText(/^You finished /).innerText();
     expect(line, `${phone.name}'s total`).toContain(`with ${tvScores.get(phone.name)} points`);
   }
+  await expectAccessible(tv, "the TV's final scores");
+  await expectAccessible(phones[1].page, "a phone's final scores");
 
   // Every question was revealed, and nothing showed its answer before then.
   expect(answers.size, "every question's answer was revealed on the TV").toBe(15);
@@ -255,7 +281,12 @@ test("a TV and five phones play a whole quiz, and no answer shows before its rev
     expect(row.answer === null, `question ${String(row.number)} sent with an answer before its reveal`).toBe(row.revealed_at === null);
   }
 
-  expect(pictureShown && paused && reloaded, "a picture, the pause and the reload all happened").toBe(true);
+  expect(new Set(kinds.values()), "a short quiz plays brain teasers, fake or real and connections")
+    .toEqual(new Set(["teaser", "fake_real", "connect"]));
+  expect(Math.min(...cluesSeen), "connections clues start with one showing").toBe(1);
+  expect(Math.max(...cluesSeen), "and drop one by one").toBeGreaterThan(1);
+  expect(hookShown, "a reveal tells the story behind its answer").toBe(true);
+  expect(paused && reloaded, "the pause and the reload both happened").toBe(true);
   expect(jokerPlayed, "the last-placed player played the joker going into the final round").toBe(true);
   expect(cspViolations, "the quiz screens run under the strict CSP").toEqual([]);
 

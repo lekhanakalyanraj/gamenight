@@ -77,10 +77,25 @@ class Outcome:
 _quiz: ContextVar[Quiz] = ContextVar("quiz")
 
 
+PLAN = [{"round": "mix", "questions": 5}, {"round": "mix", "questions": 5}, {"round": "closest", "questions": 5}]
+ROUND_KINDS = {"mix": ["choice", "true_false"], "closest": ["estimate"]}
+
+
+def next_slot(asked: int) -> dict[str, Any] | None:
+    """Where the next question falls, as the database's quiz_slot says."""
+    number = asked + 1
+    if number > 15:
+        return None
+    index = (number - 1) // 5
+    name = PLAN[index]["round"]
+    return {"number": number, "round": index + 1, "name": name, "kinds": ROUND_KINDS[name],
+            "first_of_round": (number - 1) % 5 == 0, "final_round": index == 2, "seconds": 20, "reveal_seconds": 8}
+
+
 def quiz_state(phase: str, *, kind: str = "choice", asked: int = 0, live: dict[str, Any] | None = None,
                revealed: bool = False, deadline: str | None = None, resolved: bool = False,
                nicknames: dict[str, str] | None = None, topics: dict[str, str] | None = None) -> dict[str, Any]:
-    """A quiz of 3 rounds (choice, true or false, estimate) at one moment. Attacks go in nicknames or topics,
+    """A quiz of 3 rounds (the mix twice, then closest wins) at one moment. Attacks go in nicknames or topics,
     keyed by the player they replace."""
     nicknames, topics = nicknames or {}, topics or {}
     players = [{"member_id": member(name), "nickname": nicknames.get(name, name),
@@ -96,10 +111,10 @@ def quiz_state(phase: str, *, kind: str = "choice", asked: int = 0, live: dict[s
     return {
         "game": {"id": member("quiz"), "room_id": member("quiz-room"), "kind": "quiz", "phase": phase,
                  "step": asked * 2, "round": 1 + max(asked - 1, 0) // 5, "settings": {},
-                 "config": {"rounds": 3, "per_round": 5, "seconds": 20, "reveal_seconds": 8,
-                            "round_kinds": ["choice", "true_false", "estimate"]},
+                 "config": {"rounds": 3, "seconds": 20, "plan": PLAN},
                  "phase_deadline": deadline, "paused": False, "moves_in": 0, "resolved": resolved},
-        "age_rating": "family", "asked": asked, "total": 15, "players": players, "question": question,
+        "age_rating": "family", "asked": asked, "total": 15, "next": next_slot(asked), "players": players,
+        "question": question,
         "topics_asked": [],
     }
 
@@ -144,6 +159,10 @@ async def _ask(game_id, question_id, for_member, event):
     bank = next((b for b in await _quiz_bank(game_id) if b["id"] == question_id), None)
     if bank is None:
         _refuse("22023", "That question can't be used here (unknown, not for this room, or asked tonight).")
+    slot = next_slot(q.state["asked"])
+    if slot and bank["kind"] not in slot["kinds"]:
+        kinds = " or ".join(slot["kinds"])
+        _refuse("22023", f"This round ({slot['name']}) asks {kinds} questions, not {bank['kind']}.")
     if for_member is not None and for_member not in {p["member_id"] for p in q.state["players"]}:
         _refuse("22023", "Credit a question to a player in this game.")
     asked = q.state["asked"] + 1

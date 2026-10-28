@@ -106,16 +106,24 @@ test("a TV and five phones play a whole game, and nothing secret shows", async (
   let wentOffline = false;
   let reloaded = false;
 
+  // A screen's text and its phase, read together: a screen that has reached the end shows the words by design
+  // (a phone can get there a moment before the TV, which is what ends this loop).
+  const seenBeforeEnd = (page: Page, testId: string) => page.evaluate((id) => {
+    const phase = document.querySelector(`[data-testid="${id}"]`)?.getAttribute("data-phase");
+    return phase === "ended" ? null : document.body.innerText;
+  }, testId);
   const deadline = Date.now() + 240_000;
   while ((await tv.getByTestId("tv-game").getAttribute("data-phase")) !== "ended") {
     expect(Date.now(), "the game should finish").toBeLessThan(deadline);
-    tvSeen.push(await tv.locator("body").innerText());
+    const tvText = await seenBeforeEnd(tv, "tv-game");
+    if (tvText !== null) tvSeen.push(tvText);
     const tvPhase = await tv.getByTestId("tv-game").getAttribute("data-phase");
 
     for (const phone of phones) {
       const { page, name } = phone;
       if (!(await page.getByTestId("phone-game").isVisible())) continue;
-      phonesSeen.push(await page.locator("body").innerText());
+      const phoneText = await seenBeforeEnd(page, "phone-game");
+      if (phoneText !== null) phonesSeen.push(phoneText);
 
       const card = page.getByTestId("card");
       // Held with Space on the focused card (the card's keyboard hold): a press at the card's on-screen position
@@ -176,7 +184,8 @@ test("a TV and five phones play a whole game, and nothing secret shows", async (
   await expect(tv.getByTestId("final-reveal")).toBeVisible();
   const revealText = await tv.getByTestId("final-reveal").innerText({ timeout: 10_000 });
   await expect(tv.getByTestId("reveal-player")).toHaveCount(5);
-  const words = [...revealText.matchAll(/(?:Civilians'|Undercover) word\s*\n\s*(.+)/g)].map((m) => m[1].trim());
+  // The labels are set in capitals by CSS, which innerText reflects.
+  const words = [...revealText.matchAll(/(?:Civilians'|Undercover) word\s*\n\s*(.+)/gi)].map((m) => m[1].trim());
   expect(words).toHaveLength(2);
 
   // Nothing before the end mentioned either word: not the TV, and not a phone with its card face down.
@@ -187,8 +196,8 @@ test("a TV and five phones play a whole game, and nothing secret shows", async (
   expect(cards.size).toBe(5);
   for (const [name, face] of cards) {
     const row = tv.getByTestId("reveal-player").filter({ hasText: name });
-    const role = (await row.innerText()).split("\n").pop()?.trim();
-    const expected = role === "Mr. White" ? "You're Mr. White" : role === "undercover" ? words[1] : words[0];
+    const role = await row.getAttribute("data-role");
+    const expected = role === "mr_white" ? "You're Mr. White" : role === "undercover" ? words[1] : words[0];
     expect(face, `${name}'s card`).toBe(expected);
   }
   expect({ paused, wentOffline, reloaded }, "the pause, the dropped phone and the TV reload all happened")

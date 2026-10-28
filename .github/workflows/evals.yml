@@ -8,7 +8,7 @@ name: evals
 #     change nothing AI-related (web, Dockerfiles, docs, tests) skip it, which passes.
 #   by hand (workflow_dispatch): any branch, any number of games (10 for a slice sign-off).
 # Deterministic checks gate: the golden evals' hard checks, the leak attacks on the game master and the quiz
-# master and the Heads Up commentator, quiz accuracy (no broken question kept), Heads Up card review (no bad card
+# master and the Heads Up commentator, quiz accuracy (no broken question kept), quiz fun (dull questions dropped, no broken brain teaser kept), Heads Up card review (no bad card
 # kept), narration's hard checks, and 0 leaks in real-model games.
 # Model-graded scores (judges, the host-chat red team) and freshly generated quiz questions report.
 
@@ -81,6 +81,8 @@ jobs:
       contents: read
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # Optional: with it the quiz evals write from web search, without it from Wikipedia.
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
       GAMES: ${{ needs.plan.outputs.games }}
       # CI-only internal tokens: the stack here is thrown away after the job.
       AGENTS_SERVICE_TOKEN: ci-agents-token
@@ -125,6 +127,10 @@ jobs:
       - name: "Quiz accuracy (gate: no broken question kept; fresh questions report)"
         working-directory: services/agents
         run: uv run python -m evals.run_quiz_accuracy --gate --generate cricket "indian food" --out quiz-accuracy-results.json
+
+      - name: Quiz fun and brain teasers (gate)
+        working-directory: services/agents
+        run: uv run python -m evals.run_quiz_fun --gate --out quiz-fun-results.json
 
       - name: Attacks on the Heads Up commentator (gate)
         working-directory: services/agents
@@ -180,6 +186,7 @@ jobs:
             services/agents/leak-results.json
             services/agents/quiz-leak-results.json
             services/agents/quiz-accuracy-results.json
+            services/agents/quiz-fun-results.json
             services/agents/headsup-attack-results.json
             services/agents/headsup-cards-results.json
             services/agents/narration-results.json

@@ -1,9 +1,11 @@
 """The narrator: the only way anything the game master writes reaches a screen.
 
 Every line passes four checks: the deterministic leak check (leakcheck.py), a check that it doesn't announce an
-end the game hasn't reached, the safety reviewer (a model that catches hints and off-rating lines), and the
-database's own word check in game_api.say. A rejected line goes back to the game master with the reason, to
-rewrite once; after that a safe stock line is shown instead, so a game never stalls on narration.
+end the game hasn't reached, the safety reviewer (a model that catches hints at Undercover's words and roles, and
+off-rating lines), and the database's own word check in game_api.say. In Quiz Night and Heads Up the reviewer is
+skipped: their secrets (the live answer, the card on the TV) are matched exactly by the code and the database, there's
+no word to hint at, and a model call costs every line a second or two. A rejected line goes back to the game master
+with the reason, to rewrite once; after that a safe stock line is shown instead, so a game never stalls on narration.
 """
 
 import json
@@ -21,17 +23,17 @@ LINES_PER_TURN = 2
 REWRITES = 1
 
 STOCK = {
-    "setup": "The detective has arrived. Check your card, and keep it to yourself.",
-    "clues": "Clues, please. Choose your words carefully...",
+    "setup": "Cards are out. Check yours, and keep it to yourself.",
+    "clues": "Clues, please. Choose your words carefully.",
     "discussion": "Talk it out. Someone here isn't who they seem.",
-    "vote": "The votes are in. Let's see who the room suspects.",
+    "vote": "Votes are in. Let's see who the room suspects.",
     "guess": "Mr. White, this is your moment.",
-    "question": "Phones ready. The clock is ticking!",
-    "reveal": "The answer's in. Let's see who got it!",
-    "ready": "Guesser, turn your back to the TV!",
-    "guessing": "Clues, clues, clues! Keep them coming!",
-    "recap": "Time! What a turn!",
-    "ended": "And that's the game! What a night.",
+    "question": "Phones out. Clock's running.",
+    "reveal": "Answer's in. Let's see who got it.",
+    "ready": "Guesser, back to the TV.",
+    "guessing": "Clues, keep them coming.",
+    "recap": "Time. Nice turn.",
+    "ended": "And that's the game. Good one.",
 }
 
 REVIEW = """You check a line a game-show host is about to say on the TV during a game of Undercover.
@@ -76,8 +78,10 @@ class Review(BaseModel):
 
 
 async def review(line: str, state: dict, turn: Turn) -> list[str]:
-    """The safety reviewer's objections (empty: approved). The scripted game master's lines skip it."""
-    if model_provider() == "fake" or state["game"]["phase"] == "ended":
+    """The safety reviewer's objections (empty: approved). The scripted game master's lines skip it, and so do Quiz
+    Night's and Heads Up's (see the module's note)."""
+    if model_provider() == "fake" or state["game"]["phase"] == "ended" \
+            or state["game"].get("kind") in ("quiz", "heads_up"):
         return []
     words = [w for w in ((state.get("words") or {}).get("civilian"), (state.get("words") or {}).get("undercover"),
                          *turn.picked) if w]

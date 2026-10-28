@@ -57,7 +57,8 @@ async def lobby(state: RoomState, config: RunnableConfig) -> dict:
             if snapshot.get("status") == "lobby":
                 for topic in topics:
                     result = await quiz_content.top_up(room_id, topic, snapshot.get("age_rating", "family"),
-                                                       callbacks=[GenAITracer(game="lobby")])
+                                                       callbacks=[GenAITracer(game="lobby")],
+                                                       context=described(events, "topic_picked", topic))
                     log.info("quiz bank for %r: %s", topic, result)
         # Players picking Heads Up interests: build cards for them now, so the deck leans their way at the start.
         interests = picked_interests(events)
@@ -65,8 +66,9 @@ async def lobby(state: RoomState, config: RunnableConfig) -> dict:
             snapshot = await db.room_snapshot(room_id) or {}
             if snapshot.get("status") == "lobby":
                 for interest in interests:
-                    result = await headsup_content.top_up(room_id, interest, snapshot.get("age_rating", "family"),
-                                                          callbacks=[GenAITracer(game="lobby")])
+                    result = await headsup_content.top_up(
+                        room_id, interest, snapshot.get("age_rating", "family"), callbacks=[GenAITracer(game="lobby")],
+                        context=described(events, "interests_picked", interest))
                     log.info("Heads Up cards for %r: %s", interest, result)
     return {"events": None, "kind": None}
 
@@ -93,6 +95,20 @@ def picked_interests(events: list[dict[str, Any]], at_most: int = 3) -> list[str
             if key and key not in seen:
                 seen[key] = interest
     return list(seen.values())[:at_most]
+
+
+def described(events: list[dict[str, Any]], kind: str, picked: str) -> str | None:
+    """How the player who picked this topic (or interest) described it, from the latest such event: None if they
+    didn't. The database has already cleaned it (3 to 160 characters, one line)."""
+    key = quiz_content.topic_key(picked)
+    for event in reversed(events):
+        payload = event.get("payload") or {}
+        if event.get("kind") != kind or not payload.get("context"):
+            continue
+        picks = [payload.get("topic")] if kind == "topic_picked" else payload.get("interests") or []
+        if any(quiz_content.topic_key(p) == key for p in picks):
+            return str(payload["context"])
+    return None
 
 
 async def host_chat(state: RoomState, config: RunnableConfig) -> dict:
