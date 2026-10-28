@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { Button, Card, Page } from "@/components/ui";
+import { Card, Page, Wordmark } from "@/components/ui";
 import { createClient, getIdentity } from "@/lib/supabase/server";
 
 import { signOut } from "../auth/actions";
@@ -22,31 +22,29 @@ export default async function HostPage() {
 
   return (
     <Page>
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Hi, {name}</h1>
-          <p className="text-muted">Create a room, put it on the TV, and everyone joins from their phone.</p>
-        </div>
+      <Wordmark right={
         <form action={signOut}>
-          <Button variant="secondary" className="h-9 whitespace-nowrap text-sm">Sign out</Button>
+          <button className="caps text-xs text-muted hover:text-foreground">Sign out</button>
         </form>
+      } />
+      <header className="flex flex-col gap-2">
+        <h1 className="text-4xl tracking-tight">Hi, {name}</h1>
+        <p className="text-muted">Create a room, put it on the TV, and everyone joins from their phone.</p>
       </header>
 
-      <Card>
-        <h2 className="mb-4 text-lg font-medium">New room</h2>
+      <Card label="New room">
         <CreateRoomForm defaultNickname={name.slice(0, 20)} />
       </Card>
 
       {rooms && rooms.length > 0 ? (
-        <Card>
-          <h2 className="mb-3 text-lg font-medium">Your open rooms</h2>
-          <ul className="flex flex-col divide-y divide-border">
+        <Card label="Your open rooms">
+          <ul className="flex flex-col">
             {rooms.map((room) => (
-              <li key={room.code} className="flex items-center justify-between py-2">
-                <Link href={`/play/${room.code}`} className="font-mono text-lg tracking-widest text-accent">
-                  {room.code}
+              <li key={room.code} className="border-b border-border last:border-b-0">
+                <Link href={`/play/${room.code}`} className="flex items-center justify-between py-3 hover:bg-surface-2">
+                  <span className="font-mono text-xl tracking-[0.3em]">{room.code}</span>
+                  <span className="caps text-xs text-muted">{room.age_rating} · {room.status} →</span>
                 </Link>
-                <span className="text-sm text-muted">{room.age_rating} · {room.status}</span>
               </li>
             ))}
           </ul>

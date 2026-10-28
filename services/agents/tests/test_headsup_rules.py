@@ -41,7 +41,7 @@ def turn(events=()):
 
 def test_the_game_starts_with_the_first_guesser_turning_their_back(db):
     assert asyncio.run(headsup_rules.step(turn([{"kind": "game_started"}]), state()))
-    assert db["next"] == 1 and db["said"] == ["Heads Up! Turn 1 of 4: Asha, turn your back to the TV!"]
+    assert db["next"] == 1 and db["said"] == ["Heads Up. Turn 1 of 4. Asha, back to the TV."]
 
 
 def test_after_the_recap_has_had_its_time_the_next_turn_starts(db):
@@ -63,12 +63,12 @@ def test_otherwise_it_leaves_the_clock_to_the_database(db, phase, deadline, paus
 def test_a_turn_ending_is_called_with_the_guessers_score(db):
     ended = {"kind": "phase_complete", "payload": {"phase": "guessing", "guesser": "m-ben", "got": 4, "passed": 1}}
     asyncio.run(headsup_rules.step(turn([ended]), state("recap", "2099-01-01")))
-    assert db["said"] == ["Time! Ben got 4!"] and db["next"] == 0
+    assert db["said"] == ["Time. Ben got 4."] and db["next"] == 0
 
 
 def test_the_finale_names_the_winner(db):
     asyncio.run(headsup_rules.step(turn([{"kind": "game_ended"}]), state("ended")))
-    assert db["said"] == ["That's Heads Up! Ben wins with 5 got!"]
+    assert db["said"] == ["That\'s Heads Up. Ben takes it with 5."]
 
 
 def test_the_game_is_waiting_on_the_host_only_between_turns():

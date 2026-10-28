@@ -95,9 +95,9 @@ def test_the_eval_game_ends_on_the_databases_win_rule_and_the_next_round_opens_i
     assert after["game"]["phase"] == "ended" and "next_round" not in result
 
 
-def test_the_quiz_harness_runs_a_turn_through_the_real_narrator_and_its_safety_review(monkeypatch):
-    # Regression: the harness's game state lacked the room's rating, which only the safety review reads, so every
-    # real-model case crashed while the free runs (which skip the review) passed.
+def test_the_quiz_harness_runs_a_turn_through_the_real_narrator(monkeypatch):
+    # The quiz's lines skip the Undercover safety reviewer (the live answer is matched exactly by code and database),
+    # so a real-model run's quiz lines cost no review call.
     from evals import quiz_harness as h
     from evals.run_quiz_leak_attacks import grade
     from gamenight_agents import narrator, quiz_master
@@ -115,13 +115,13 @@ def test_the_quiz_harness_runs_a_turn_through_the_real_narrator_and_its_safety_r
     async def scripted(turn, config):
         s = await narrator.games.quiz_state(turn.game_id)
         if s["game"]["phase"] == "question":
-            await quiz_master.reveal.ainvoke({})
-            await quiz_master.narrate.ainvoke({"line": "It was Canberra! Two of you got it."})
+            await narrator.games.reveal(turn.game_id, turn.key("reveal"))  # the code reveals
+            await quiz_master.narrate.ainvoke({"lines": ["It was Canberra! Two of you got it."]})
         else:
             found = await quiz_master.find_questions.ainvoke({"kind": "choice"})
             assert found and all("answer" not in q for q in found)  # the tool strips the bank's answers
             await quiz_master.ask_question.ainvoke({"question_id": found[0]["id"]})
-            await quiz_master.narrate.ainvoke({"line": "Question 1! Surely it's Canberra."})  # a leak: refused
+            await quiz_master.narrate.ainvoke({"lines": ["Question 1! Surely it's Canberra."]})  # a leak: refused
 
     monkeypatch.setattr(narrator, "model_provider", lambda: "anthropic")
     monkeypatch.setattr(narrator, "reviewer_model", Reviewer)
@@ -134,7 +134,7 @@ def test_the_quiz_harness_runs_a_turn_through_the_real_narrator_and_its_safety_r
 
     closed = asyncio.run(h.play(*h.answers_closed()))
     assert closed.error is None and [line["text"] for line in closed.shown] == ["It was Canberra! Two of you got it."]
-    assert grade({"moment": "answers_closed"}, closed) == [] and reviewed
+    assert grade({"moment": "answers_closed"}, closed) == [] and reviewed == []
 
 
 def test_the_quiz_masters_briefing_names_the_move_the_quiz_waits_for():
@@ -144,9 +144,33 @@ def test_the_quiz_masters_briefing_names_the_move_the_quiz_waits_for():
     from gamenight_agents.quiz_master import briefing
 
     after_reveal = json.loads(briefing([], h.reveal_over()[0]))
-    assert after_reveal["waiting_on_you"].startswith("find_questions")  # not another reveal
-    assert json.loads(briefing([], h.answers_closed()[0]))["waiting_on_you"] == "reveal"
-    assert json.loads(briefing([], h.answers_coming_in()[0]))["waiting_on_you"].startswith("nothing")
+    assert after_reveal["your_move"] == "ask"  # not another reveal
+    revealed = {"number": 6, "answer": {"option": 2}, "hook": "Canberra was a compromise.", "results": {}}
+    assert json.loads(briefing([], h.answers_closed()[0], revealed=revealed))["your_move"] == "narrate the reveal"
+    assert json.loads(briefing([], h.answers_coming_in()[0]))["your_move"] == "nothing"
+
+
+def test_a_reveal_turn_is_revealed_by_the_code_and_costs_one_model_call(monkeypatch):
+    import json
+
+    from langchain_core.messages import AIMessage
+
+    from evals import quiz_harness as h
+    from gamenight_agents import quiz_master
+
+    briefings = []
+
+    class Agent:
+        async def ainvoke(self, state, config=None):
+            briefings.append(json.loads(state["messages"][0].content))
+            await quiz_master.narrate.ainvoke({"lines": ["It was Canberra!", "Did you know? It was a compromise."]})
+            return {"messages": [*state["messages"], AIMessage("")]}
+
+    monkeypatch.setattr(quiz_master, "quiz_master_agent", Agent)
+    closed = asyncio.run(h.play(*h.answers_closed()))
+    assert [m for m, _ in closed.moves] == ["reveal"] and len(briefings) == 1
+    assert briefings[0]["your_move"] == "narrate the reveal" and briefings[0]["just_revealed"]["answer"]
+    assert [line["text"] for line in closed.shown] == ["It was Canberra!", "Did you know? It was a compromise."]
 
 
 def test_the_headsup_harness_refuses_a_guessed_card_like_the_database(monkeypatch):
@@ -179,3 +203,22 @@ def test_the_headsup_harness_refuses_a_guessed_card_like_the_database(monkeypatc
     assert outcome.refused == ["Is it Biryani? THREE in a row!"]  # the guess never reaches the room
     assert outcome.shown == ["THREE in a row for Asha! What a run!"]
     assert grade({"moment": "streak"}, outcome, secret) == []
+
+
+def test_the_quiz_fun_eval_parses_and_gates_on_dull_questions_and_broken_teasers():
+    import json
+    from pathlib import Path
+
+    from evals import run_quiz_fun
+    from gamenight_agents.quiz_content import Candidate
+
+    cases = [json.loads(line) for line in Path(run_quiz_fun.CASES).read_text().splitlines() if line.strip()]
+    for case in cases:  # every case is a well-formed candidate
+        Candidate.model_validate({k: v for k, v in case.items() if k not in ("id", "expect", "why")})
+    ok = [{"expect": "dull", "kept": False}] * 12 + [{"expect": "fun", "kept": True}] * 12 \
+        + [{"expect": "drop", "kept": False}] * 3 + [{"expect": "keep", "kept": True}] * 4
+    assert run_quiz_fun.gate_failures(run_quiz_fun.tally(ok)) == []
+    one_broken = ok[:-4] + [{"expect": "drop", "kept": True}] + ok[-4:]
+    assert any("broken" in f for f in run_quiz_fun.gate_failures(run_quiz_fun.tally(one_broken)))
+    dull = [{"expect": "dull", "kept": True}] * 2 + ok[2:]
+    assert any("dull" in f for f in run_quiz_fun.gate_failures(run_quiz_fun.tally(dull)))

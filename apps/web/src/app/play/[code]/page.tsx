@@ -19,7 +19,7 @@ export default async function PlayPage({ params }: PageProps<"/play/[code]">) {
   if (!data || !me) {
     return (
       <Page>
-        <h1 className="text-2xl font-semibold">You&apos;re not in room {code.toUpperCase()}</h1>
+        <h1 className="border-t border-ink pt-4 text-3xl">You&apos;re not in room {code.toUpperCase()}</h1>
         <p className="text-muted">Join with the code to see this room.</p>
         <ButtonLink href={`/join?code=${encodeURIComponent(code)}`}>Join room {code.toUpperCase()}</ButtonLink>
       </Page>

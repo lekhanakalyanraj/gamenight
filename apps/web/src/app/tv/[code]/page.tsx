@@ -29,7 +29,7 @@ export default async function TvRoomPage({ params }: PageProps<"/tv/[code]">) {
     margin: 1,
     width: 560,
     errorCorrectionLevel: "M",
-    color: { dark: "#12121f", light: "#f4f1ea" },
+    color: { dark: "#000000", light: "#f6f8f7" },
   });
 
   return (

@@ -78,7 +78,8 @@ def quiz_answer_leaks(line: str, question: dict | None) -> list[str]:
         return []
     key = question["key"]
     text = normalise(line)
-    if question.get("kind") in ("choice", "picture") and "option" in key and question.get("options"):
+    if question.get("kind") in ("choice", "picture", "teaser", "lightning", "connect") and "option" in key \
+            and question.get("options"):
         options = [normalise(option) for option in question["options"]]
         right = options[key["option"]]
         others = [o for i, o in enumerate(options) if i != key["option"]]
@@ -90,4 +91,9 @@ def quiz_answer_leaks(line: str, question: dict | None) -> list[str]:
     if question.get("kind") == "estimate" and isinstance(key.get("value"), int | float) \
             and says_number(line, key["value"]):
         return ["it says a number that could be the answer while the question is open"]
+    if question.get("kind") == "order" and isinstance(key.get("order"), list) and question.get("options"):
+        items = [normalise(question["options"][i]) for i in key["order"]]
+        places = [m.start() if (m := re.search(r"\b" + re.escape(item) + r"\b", text)) else -1 for item in items]
+        if all(p >= 0 for p in places) and places == sorted(places):
+            return ["it reads the items out in their right order while the question is open"]
     return []

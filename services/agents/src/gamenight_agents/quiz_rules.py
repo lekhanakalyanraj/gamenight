@@ -2,8 +2,9 @@
 local runs, and until the AI quiz master arrives). It plays through the same database moves and narrator as the AI
 will. Now and then it tries a line that blurts out the live answer, to prove the database refuses it.
 
-The rules, as approved: each round has its kind (config.round_kinds); questions lean toward the topics of the
-players furthest behind, falling back to any topic; the database does the timing and all the scoring.
+The rules, as approved: each round asks its own kinds (the state's `next` says which, from config.plan); questions
+lean toward the topics of the players furthest behind, falling back to any topic; every reveal reads out the
+question's hook; the database does the timing and all the scoring.
 """
 
 from typing import Any
@@ -13,8 +14,9 @@ from gamenight_agents.quiz_content import topic_key
 from gamenight_agents.turn import Turn
 
 MOVES_PER_TURN = 3
-KIND_NAMES = {"choice": "multiple choice", "true_false": "true or false", "picture": "picture round",
-              "estimate": "closest guess wins"}
+ROUND_NAMES = {"teasers": "brain teasers", "fake_real": "fake or real", "lightning": "the lightning round",
+               "picture": "the picture round", "mix": "the mix", "order": "in order", "closest": "closest wins",
+               "connect": "connections, the finale"}
 
 
 async def play(turn: Turn) -> None:
@@ -30,7 +32,7 @@ async def step(turn: Turn, s: dict[str, Any]) -> bool:
     if g["phase"] == "ended":
         if any(e["kind"] == "game_ended" for e in turn.events) and turn.lines_shown == 0 and s["players"]:
             top = s["players"][0]  # sorted by points
-            await narrator.narrate(turn, f"That's the quiz! {top['nickname']} wins with {top['points']} points!")
+            await narrator.narrate(turn, f"That's a wrap. {top['nickname']} takes it with {top['points']} points.")
         return False
     if g["paused"]:
         return False
@@ -42,44 +44,50 @@ async def step(turn: Turn, s: dict[str, Any]) -> bool:
         question, for_member = picked
         asked = await games.ask(turn.game_id, question["id"], for_member, turn.key("ask"))
         await leak_probe(turn, question)
-        await narrator.narrate(turn, intro(asked, g["config"]["per_round"], names.get(for_member), question))
+        await narrator.narrate(turn, intro(asked, s["next"], names.get(for_member), question))
         return True
     if g["phase"] == "question" and g["phase_deadline"] is None and not g["resolved"]:
         revealed = await games.reveal(turn.game_id, turn.key("reveal"))
         results = revealed["results"]
         if s["question"]["kind"] == "estimate":
-            line = f"Closest guess wins! {len(results.get('closest', []))} nailed it."
+            line = f"Closest guess wins. {len(results.get('closest', []))} nailed it."
+        elif s["question"]["kind"] == "order":
+            line = f"{results.get('right', 0)} of {results.get('answered', 0)} got the order spot on."
         else:
-            line = f"{results.get('right', 0)} of {results.get('answered', 0)} got it!"
+            line = f"{results.get('right', 0)} of {results.get('answered', 0)} got it."
         await narrator.narrate(turn, line)
+        if revealed.get("hook"):
+            await narrator.narrate(turn, revealed["hook"])
         return True
     return False  # answers are coming in, or the reveal is on screen
 
 
 async def pick(turn: Turn, s: dict[str, Any]) -> tuple[dict[str, Any], str | None] | None:
-    """The next question: this round's kind, from the topic of the player furthest behind who has one."""
-    config = s["game"]["config"]
-    round_index = min(s["asked"] // config["per_round"], len(config["round_kinds"]) - 1)
-    kind = config["round_kinds"][round_index]
+    """The next question: a kind this round asks, from the topic of the player furthest behind who has one."""
+    if not s.get("next"):
+        return None  # every question has been asked
+    kinds = list(s["next"]["kinds"])
+    turn.rng.shuffle(kinds)
     for player in sorted(s["players"], key=lambda p: (p["points"], turn.rng.random())):
         if topic := topic_key(player.get("topic")):
-            found = await games.quiz_bank(turn.game_id, topic=topic, kind=kind, limit=5)
-            if found:
-                return turn.rng.choice(found), player["member_id"]
-    for any_kind in (kind, None):  # no player's topic has one: any topic, then any kind
-        found = await games.quiz_bank(turn.game_id, kind=any_kind, limit=10)
+            for kind in kinds:
+                found = await games.quiz_bank(turn.game_id, topic=topic, kind=kind, limit=5)
+                if found:
+                    return turn.rng.choice(found), player["member_id"]
+    for kind in kinds:  # no player's topic has one: any topic (never another round's kind: the database refuses it)
+        found = await games.quiz_bank(turn.game_id, kind=kind, limit=10)
         if found:
             return turn.rng.choice(found), None
     return None
 
 
-def intro(asked: dict[str, Any], per_round: int, name: str | None, question: dict[str, Any]) -> str:
+def intro(asked: dict[str, Any], slot: dict[str, Any], name: str | None, question: dict[str, Any]) -> str:
     opening = ""
-    if (asked["number"] - 1) % per_round == 0:  # the first question of a round
-        opening = f"Round {asked['round']}: {KIND_NAMES.get(asked['kind'], asked['kind'])}! "
+    if slot.get("first_of_round"):
+        opening = f"Round {asked['round']}: {ROUND_NAMES.get(slot['name'], slot['name'])}. "
     if asked.get("final_round") and asked.get("jokers_to"):
         opening = "Final round, and the joker is in play! "
-    credit = f" This one's for {name}: {question['topic']}!" if name else ""
+    credit = f" This one's for {name}: {question['topic']}." if name else ""
     return f"{opening}Question {asked['number']} of {asked['of']}.{credit}"[:200]
 
 

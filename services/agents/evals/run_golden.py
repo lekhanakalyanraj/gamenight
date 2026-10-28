@@ -1,4 +1,4 @@
-"""Tier 1 golden evals: the real host agent and lobby welcome against 28 cases, with a Haiku judge.
+"""Tier 1 golden evals: the real host agent and lobby welcome against 31 cases, with a Haiku judge.
 
 Each case gets deterministic checks (tools called or not, text it must or mustn't contain, length) and a
 1-5 judge score against its rubric. Report-only until slice 3: exits 0 unless the run itself breaks, or

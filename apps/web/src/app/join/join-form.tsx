@@ -18,7 +18,7 @@ export function JoinForm({ code }: { code: string }) {
         autoCapitalize="characters"
         autoComplete="off"
         maxLength={6}
-        className="h-14 rounded-xl border border-border bg-background px-3 text-center font-mono text-2xl tracking-[0.4em] uppercase outline-none focus:border-accent"
+        className="h-16 border border-ink bg-surface px-3 text-center font-mono text-3xl tracking-[0.5em] uppercase outline-none focus-visible:outline-accent"
         required
       />
       <Field
@@ -29,8 +29,8 @@ export function JoinForm({ code }: { code: string }) {
         autoComplete="nickname"
         required
       />
-      <label className="flex items-center gap-2 text-sm text-muted">
-        <input type="checkbox" name="confirm_adult" className="size-4 accent-accent" />
+      <label className="flex items-center gap-3 text-sm text-muted">
+        <input type="checkbox" name="confirm_adult" className="size-4 accent-[var(--ink)]" />
         I&apos;m 18 or over (needed for adult rooms)
       </label>
       <Notice>{state.error}</Notice>

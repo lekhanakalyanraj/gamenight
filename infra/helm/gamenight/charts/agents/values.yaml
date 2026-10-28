@@ -9,7 +9,8 @@ env:
   SUPABASE_JWT_ISSUER: http://127.0.0.1:55421/auth/v1  # the issuer in Supabase's tokens (its public address)
   CATALOG_URL: http://catalog:8080
 # DATABASE_URI (its own Postgres), AGENTS_DATABASE_URL and GAME_MASTER_DATABASE_URL (its two Supabase logins),
-# ANTHROPIC_API_KEY, LANGSMITH_API_KEY, AGENTS_SERVICE_TOKEN and CATALOG_SERVICE_TOKEN
+# ANTHROPIC_API_KEY, LANGSMITH_API_KEY, AGENTS_SERVICE_TOKEN and CATALOG_SERVICE_TOKEN; optionally TAVILY_API_KEY
+# (web search for quiz questions: without it they come from Wikipedia only)
 secret: true
 writable:
   - {name: tmp, path: /tmp, size: 256Mi}

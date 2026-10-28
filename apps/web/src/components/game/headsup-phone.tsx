@@ -2,10 +2,10 @@
 
 import type { HeadsupTurn } from "@gamenight/db-types";
 import { motion, MotionConfig } from "motion/react";
-import { type ReactNode, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 
 import { HostDrawer } from "@/components/game/host-drawer";
-import { PhaseTitle, TimerRing } from "@/components/game/parts";
+import { Banner, HowTo, PhaseTitle, PhoneHeading, Status, Timer } from "@/components/game/parts";
 import { Leaderboard, Podium } from "@/components/game/quiz-parts";
 import { HostCaption } from "@/components/lobby";
 import { Button, Notice } from "@/components/ui";
@@ -57,17 +57,13 @@ export default function PhoneHeadsUp({ live, meId, isHost, onBackToLobby }: {
   return (
     <MotionConfig reducedMotion="user">
       <main data-testid="headsup-phone" data-phase={game.phase} data-turn={turn?.number ?? 0} data-guesser={iGuess}
-            className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-5 py-6 pb-28">
-        <header className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm text-muted">
-              {turn && game.phase !== "ended" ? `Turn ${turn.number} of ${headsupConfig(game).total_turns}` : "Heads Up"}
-            </p>
-            <h1 className="text-2xl font-semibold">{turnHeading(game.phase, guesser)}</h1>
-          </div>
-          {(game.phase === "guessing" || game.phase === "ready") && left !== null && !game.paused_at
-            ? <TimerRing seconds={left} total={total} /> : null}
-        </header>
+            className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-5 py-6 pb-28">
+        <PhoneHeading
+          label={turn && game.phase !== "ended" ? `Heads Up · turn ${turn.number} of ${headsupConfig(game).total_turns}` : "Heads Up"}
+          title={turnHeading(game.phase, guesser)}
+          timer={(game.phase === "guessing" || game.phase === "ready") && left !== null && !game.paused_at
+            ? <Timer seconds={left} total={total} /> : null}
+        />
 
         <HostCaption text={latestHostLine(live.hostLines)?.text ?? null} />
 
@@ -75,7 +71,7 @@ export default function PhoneHeadsUp({ live, meId, isHost, onBackToLobby }: {
 
         <PhaseTitle id={`${game.phase}-${turn?.number ?? 0}`} className="flex flex-col gap-4">
           {game.phase === "ended" ? (
-            <div data-testid="final-scores" className="flex flex-col gap-5">
+            <div data-testid="final-scores" className="flex flex-col gap-6">
               <Podium scores={scores} names={names} />
               <Leaderboard scores={scores} names={names} meId={meId} />
               <Button onClick={onBackToLobby}>{isHost ? "Play again" : "Back to the lobby"}</Button>
@@ -84,10 +80,13 @@ export default function PhoneHeadsUp({ live, meId, isHost, onBackToLobby }: {
             <Status title="Heads Up is starting">The first guesser is up in a moment.</Status>
           ) : game.phase === "ready" ? (
             iGuess ? (
-              <motion.div initial={{ scale: 0.8 }} animate={{ scale: [0.8, 1.06, 1] }} data-testid="your-turn"
-                          className="rounded-3xl bg-accent px-5 py-8 text-center text-accent-ink">
-                <p className="text-3xl font-semibold">You&apos;re guessing!</p>
-                <p className="mt-2 text-lg">Turn your back to the TV, now.</p>
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}
+                          data-testid="your-turn" className="flex flex-col gap-6 bg-accent px-5 py-8 text-accent-ink">
+                <p className="caps text-xs">Your turn</p>
+                <div>
+                  <p className="text-5xl tracking-tight">You&apos;re guessing!</p>
+                  <p className="mt-2 text-lg">Turn your back to the TV, now.</p>
+                </div>
               </motion.div>
             ) : (
               <Status title={`${guesser} is up`}>Get ready to give clues. No saying the word!</Status>
@@ -105,7 +104,7 @@ export default function PhoneHeadsUp({ live, meId, isHost, onBackToLobby }: {
         </PhaseTitle>
 
         {game.phase === "guessing" && isHost && !iGuess ? (
-          <p className="text-center text-sm text-muted">You&apos;re the host: tap for {guesser} if they can&apos;t.</p>
+          <p className="caps text-xs text-muted">You&apos;re the host: tap for {guesser} if they can&apos;t</p>
         ) : null}
 
         <Notice>{error}</Notice>
@@ -113,14 +112,11 @@ export default function PhoneHeadsUp({ live, meId, isHost, onBackToLobby }: {
         {game.phase !== "ended" ? (
           <>
             {game.phase === "recap" ? <Leaderboard scores={scores} names={names} meId={meId} limit={5} /> : null}
-            <details className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm">
-              <summary className="cursor-pointer font-medium">How to play</summary>
-              <p className="mt-2 text-muted">{HOW_TO_PLAY[game.phase]}</p>
-            </details>
+            <HowTo><p>{HOW_TO_PLAY[game.phase]}</p></HowTo>
           </>
         ) : null}
 
-        {!live.connected ? <p role="status" className="text-center text-sm text-muted">Reconnecting…</p> : null}
+        {!live.connected ? <p role="status" className="caps text-xs text-muted">Reconnecting…</p> : null}
       </main>
       {isHost && game.phase !== "ended" ? <HostDrawer game={game} roomId={live.room.id} voice={live.room.voice} /> : null}
     </MotionConfig>
@@ -136,16 +132,30 @@ function GuessPad({ turn, shown, guesser, pending, onTap }: {
 }) {
   return (
     <div data-testid="guess-pad" className="flex flex-col gap-4">
-      <p className="text-center text-lg">
-        {guesser ? `For ${guesser}: ` : ""}Card {shown} · <span className="font-semibold">{turn.got} got</span> · {turn.passed} passed
-      </p>
+      {guesser ? <p className="caps text-xs text-muted">For {guesser}</p> : null}
+      <div className="flex items-end justify-between gap-4 border-b border-ink pb-3">
+        <p data-testid="card-number" className="flex flex-col">
+          <span className="caps text-xs text-muted">Card</span>
+          <span className="numeral text-8xl leading-none">{String(shown).padStart(2, "0")}</span>
+        </p>
+        <dl className="flex gap-5 text-right">
+          <div className="flex flex-col">
+            <dt className="caps text-xs text-muted">Got</dt>
+            <dd data-testid="got-count" className="numeral text-5xl leading-none">{turn.got}</dd>
+          </div>
+          <div className="flex flex-col">
+            <dt className="caps text-xs text-muted">Passed</dt>
+            <dd data-testid="passed-count" className="numeral text-5xl leading-none text-muted">{turn.passed}</dd>
+          </div>
+        </dl>
+      </div>
       <button type="button" disabled={pending} onClick={() => onTap("got")}
-              className="h-36 rounded-3xl bg-[#15803d] text-4xl font-semibold text-white transition active:scale-95 disabled:opacity-50">
-        Got it
+              className="flex h-44 items-end justify-between bg-ink p-5 text-5xl tracking-tight text-background transition active:opacity-80 disabled:opacity-40">
+        Got it <span aria-hidden className="caps text-sm opacity-60">✓</span>
       </button>
       <button type="button" disabled={pending} onClick={() => onTap("pass")}
-              className="h-24 rounded-3xl border border-border bg-surface-2 text-3xl font-semibold transition active:scale-95 disabled:opacity-50">
-        Pass
+              className="flex h-28 items-end justify-between border border-ink p-5 text-4xl tracking-tight transition active:bg-surface-2 disabled:opacity-40">
+        Pass <span aria-hidden className="caps text-sm text-muted">→</span>
       </button>
     </div>
   );
@@ -155,29 +165,16 @@ function Recap({ turn, guesser }: { turn: HeadsupTurn; guesser: string }) {
   const cards = recapCards(turn);
   return (
     <div data-testid="recap" className="flex flex-col gap-3">
-      <p className="text-center text-3xl font-semibold">{guesser} got {turn.got}!</p>
-      <ul className="flex flex-col gap-1.5">
+      <p className="text-4xl tracking-tight">{guesser} got {turn.got}!</p>
+      <ul className="flex flex-col border-t border-ink">
         {cards.map((c, i) => (
           <li key={i} data-testid="recap-card" data-result={c.result ?? "none"}
-              className={`flex items-center justify-between rounded-xl border px-3 py-2 ${c.result === "got" ? "border-[#2bb673]" : "border-border opacity-70"}`}>
+              className={`flex items-center justify-between border-b border-border py-2 ${c.result === "got" ? "" : "text-muted"}`}>
             <span>{c.card}</span>
-            <span className="text-sm">{c.result === "got" ? "Got it" : c.result === "pass" ? "Passed" : "Time"}</span>
+            <span className={`caps text-xs ${c.result === "got" ? "text-ok" : ""}`}>{c.result === "got" ? "Got it" : c.result === "pass" ? "Passed" : "Time"}</span>
           </li>
         ))}
       </ul>
     </div>
   );
-}
-
-function Status({ title, children }: { title: string; children?: ReactNode }) {
-  return (
-    <div data-testid="status" className="flex flex-col gap-1 rounded-2xl border border-border bg-surface px-5 py-6 text-center">
-      <p className="text-2xl font-semibold">{title}</p>
-      {children ? <p className="text-muted">{children}</p> : null}
-    </div>
-  );
-}
-
-function Banner({ children }: { children: ReactNode }) {
-  return <p role="status" className="rounded-xl border border-accent/50 px-3 py-2 text-center text-accent">{children}</p>;
 }

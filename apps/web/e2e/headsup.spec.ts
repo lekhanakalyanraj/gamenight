@@ -116,6 +116,7 @@ test("a TV and three phones play Heads Up, and no phone ever gets a live card", 
   const interests = (page: Page) => page.getByRole("group", { name: "Heads Up interests" });
   await interests(phones[1].page).getByRole("button", { name: "Cricket" }).click();
   await expect(phones[1].page.getByTestId("my-interests")).toHaveText("Cricket");
+  await interests(phones[1].page).getByRole("button", { name: /^More/ }).click(); // Food is past the first few
   await interests(phones[1].page).getByRole("button", { name: "Food" }).click();
   await expect(phones[1].page.getByTestId("my-interests")).toHaveText("Cricket, Food");
   await phones[2].page.getByLabel("Your own interest").fill("Animals");
@@ -124,7 +125,7 @@ test("a TV and three phones play Heads Up, and no phone ever gets a live card", 
   await expect(tv.getByTestId("player-interests")).toHaveCount(2);
 
   // The host starts Heads Up: one turn each, 45 seconds.
-  await host.page.getByRole("tab", { name: "Heads Up" }).click();
+  await host.page.getByRole("radio", { name: "Heads Up" }).click();
   await host.page.getByRole("button", { name: "45 seconds" }).click();
   await host.page.getByRole("button", { name: "Start Heads Up" }).click();
   await expect(tv.getByTestId("headsup-tv")).toBeVisible({ timeout: 30_000 });

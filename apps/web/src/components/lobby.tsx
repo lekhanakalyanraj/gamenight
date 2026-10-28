@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
 
-import { AGE_LABEL, initials, type LobbyMember, type LobbyRoom, MIN_PLAYERS, tileColour } from "@/lib/room";
+import { Avatar } from "@/components/game/parts";
+import { AGE_LABEL, type LobbyMember, type LobbyRoom, MIN_PLAYERS } from "@/lib/room";
+import { topicClass } from "@/lib/topics";
 
 export function AgeBadge({ rating }: { rating: LobbyRoom["age_rating"] }) {
-  const tone = rating === "adult" ? "border-danger/60 text-danger" : "border-border text-muted";
-  return <span className={`rounded-full border px-3 py-1 text-sm font-medium ${tone}`}>{AGE_LABEL[rating]}</span>;
+  const tone = rating === "adult" ? "border-danger text-danger" : "border-ink text-foreground";
+  return <span className={`caps border px-2 py-1 text-xs ${tone}`}>{AGE_LABEL[rating]}</span>;
 }
 
 /** "4 / 16 players · 3 needed to start" */
@@ -12,12 +14,13 @@ export function PlayerCount({ count, max }: { count: number; max: number }) {
   const short = Math.max(0, MIN_PLAYERS - count);
   return (
     <span>
-      {count} / {max} players
+      <span className="font-mono">{count}/{max}</span> players
       {short > 0 ? <span className="text-muted"> · {short} more needed to start</span> : null}
     </span>
   );
 }
 
+/** One player as a spec-sheet row: their square, their name, and whether their phone is here. */
 export function PlayerTile({ member, online, size = "phone", isMe = false, children }: {
   member: LobbyMember;
   online: boolean;
@@ -31,33 +34,29 @@ export function PlayerTile({ member, online, size = "phone", isMe = false, child
       data-testid="player"
       data-nickname={member.nickname}
       data-online={online}
-      className={`flex items-center gap-3 rounded-2xl border border-border bg-surface transition-opacity ${
-        big ? "p-4" : "p-3"
-      } ${online ? "" : "opacity-45"}`}
+      className={`flex items-center gap-4 border-b border-border transition-opacity ${big ? "py-4" : "py-3"} ${online ? "" : "opacity-40"}`}
     >
-      <span
-        aria-hidden
-        className={`relative grid shrink-0 place-items-center rounded-full font-semibold text-white ${tileColour(member.id)} ${
-          big ? "size-16 text-2xl" : "size-10 text-sm"
-        }`}
-      >
-        {initials(member.nickname)}
-        <span
-          className={`absolute -right-0.5 -bottom-0.5 rounded-full border-2 border-surface ${big ? "size-5" : "size-3.5"} ${
-            online ? "bg-[#2bb673]" : "bg-muted/60"
-          }`}
-        />
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className={`truncate font-medium ${big ? "text-2xl" : ""}`}>
+      <Avatar id={member.id} name={member.nickname} size={big ? 64 : 40} live={isMe} />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className={`truncate ${big ? "text-3xl" : "text-lg"}`}>
           {member.nickname}
           {isMe ? <span className="text-muted"> (you)</span> : null}
         </span>
-        <span className={`text-muted ${big ? "text-base" : "text-xs"}`}>
-          {member.role === "host" ? "Host" : online ? "Here" : "Phone disconnected"}
-          {member.topic ? <span data-testid="player-topic"> · quiz topic: {member.topic}</span> : null}
-          {member.interests?.length ? <span data-testid="player-interests"> · into {member.interests.join(", ")}</span> : null}
+        <span className={`text-muted ${big ? "text-lg" : "text-xs"}`}>
+          {member.topic ? (
+            <span data-testid="player-topic">quiz topic: <span className={topicClass(member.topic)}>{member.topic}</span></span>
+          ) : null}
+          {member.topic && member.interests?.length ? " · " : null}
+          {member.interests?.length ? (
+            <span data-testid="player-interests">into {member.interests.map((i, n) => (
+              <span key={i}>{n > 0 ? ", " : ""}<span className={topicClass(i)}>{i}</span></span>
+            ))}</span>
+          ) : null}
         </span>
+      </span>
+      <span className={`caps flex items-center gap-2 text-muted ${big ? "text-base" : "text-xs"}`}>
+        {member.role === "host" ? "Host" : online ? "Here" : "Phone disconnected"}
+        <span aria-hidden className={`inline-block ${big ? "size-3" : "size-2"} ${online ? "bg-ink" : "border border-ink"}`} />
       </span>
       {children}
     </li>
@@ -67,8 +66,8 @@ export function PlayerTile({ member, online, size = "phone", isMe = false, child
 /** A full-screen message for rooms that have ended for this device. */
 export function RoomEnded({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-4 px-5 py-10 text-center">
-      <h1 role="status" className="text-2xl font-semibold">{title}</h1>
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-5 py-10">
+      <h1 role="status" className="border-t border-ink pt-4 text-3xl">{title}</h1>
       {children}
     </main>
   );
@@ -82,11 +81,9 @@ export function HostCaption({ text, size = "phone" }: { text: string | null; siz
     <p
       data-testid="host-line"
       aria-live="polite"
-      className={`flex items-baseline gap-3 rounded-2xl border border-accent/40 bg-surface-2 ${big ? "px-6 py-4 text-3xl" : "px-3 py-2 text-sm"}`}
+      className={`flex items-baseline border-l-2 border-accent ${big ? "gap-6 py-2 pr-[20rem] pl-6 text-4xl leading-tight" : "gap-3 py-1 pl-3 text-base"}`}
     >
-      <span className={`shrink-0 rounded-full bg-accent font-medium text-accent-ink ${big ? "px-3 py-1 text-lg" : "px-2 text-xs"}`}>
-        AI host
-      </span>
+      <span className={`caps shrink-0 text-muted ${big ? "text-lg" : "text-[11px]"}`}>AI host</span>
       <span>{text}</span>
     </p>
   );

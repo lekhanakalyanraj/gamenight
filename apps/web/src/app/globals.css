@@ -1,17 +1,66 @@
 @import "tailwindcss";
 
-/* gamenight is a night-time, big-screen app: a deliberate dark theme with a warm lamp-light accent. */
+/*
+ * gamenight's design system: an instrument panel for a party, after teenage engineering's catalogue. Five neutrals
+ * and one amber note. Phones and host pages are the light canvas; the TV is the carbon display case
+ * ([data-theme="carbon"]). Zero radius, zero shadow, zero gradient: hairline rules and the light/dark band do the work.
+ */
 :root {
-  --background: #12121f;
-  --surface: #1c1c30;
-  --surface-2: #26263f;
-  --border: #34345a;
-  --foreground: #f4f1ea;
-  --muted: #a9a7bd;
-  --accent: #ffb347;
-  --accent-ink: #1a1206;
-  --danger: #ff6b6b;
+  --background: #f6f8f7; /* canvas mist */
+  --surface: #ffffff;
+  --surface-2: #eceeed;
+  --border: #e5e5e5; /* steel grey hairlines */
+  --ink: #000000; /* text, strong rules, filled controls */
+  --foreground: #000000;
+  --muted: #6b6b6b; /* the reference's graphite (#b2b2b2) is too faint on the light canvas */
+  --accent: #f5b800; /* "live": timers, your turn, you */
+  --accent-ink: #000000;
+  --ok: #17763f; /* reveal states only */
+  --danger: #c0352c;
+  /* Topic colours: the one place colour means something else. A picked topic's or interest's text shows in its
+     theme's colour; each is 4.5:1 or better on both canvases. No reds or greens (those mean wrong and right). */
+  --topic-1: #b54708;
+  --topic-2: #8b5a2b;
+  --topic-3: #5f6b00;
+  --topic-4: #0e7470;
+  --topic-5: #0369a1;
+  --topic-6: #1d4ed8;
+  --topic-7: #4338ca;
+  --topic-8: #6d28d9;
+  --topic-9: #86198f;
+  --topic-10: #a3195b;
+  --topic-11: #475569;
+  --topic-12: #155e75;
+  color-scheme: light;
+}
+
+[data-theme="carbon"] {
+  --background: #0f0e12;
+  --surface: #16151b;
+  --surface-2: #1f1e25;
+  --border: #2a2930;
+  --ink: #f6f8f7;
+  --foreground: #f6f8f7;
+  --muted: #b2b2b2;
+  --accent: #f5b800;
+  --accent-ink: #000000;
+  --ok: #3ccf7a;
+  --danger: #ff5a4f;
+  --topic-1: #ff9f5a;
+  --topic-2: #e0a878;
+  --topic-3: #c8d65a;
+  --topic-4: #3fd4c8;
+  --topic-5: #4cc3f5;
+  --topic-6: #7aa2ff;
+  --topic-7: #a5a1ff;
+  --topic-8: #c19bff;
+  --topic-9: #e48cf0;
+  --topic-10: #ff7ab8;
+  --topic-11: #a7b4c6;
+  --topic-12: #67d6f0;
   color-scheme: dark;
+  background: var(--background);
+  color: var(--foreground);
 }
 
 @theme inline {
@@ -19,16 +68,90 @@
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-border: var(--border);
+  --color-ink: var(--ink);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
+  --color-ok: var(--ok);
   --color-danger: var(--danger);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-plex-mono);
+}
+
+/* Labels, codes and table numbers: small mono capitals, the system's quiet voice. */
+@utility caps {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Big numbers (timers, scores, codes): the hairline weight, with even figures so they don't jitter as they count. */
+@utility numeral {
+  font-weight: 100;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.02em;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+  font-weight: 300;
+}
+
+h1, h2, h3, strong, b {
+  font-weight: 300;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* A picked topic's text in its theme colour (lib/topics.ts picks the number). Classes, not inline styles: the
+   server-rendered lobby runs under a nonce-only style CSP. */
+.topic-1 { color: var(--topic-1); }
+.topic-2 { color: var(--topic-2); }
+.topic-3 { color: var(--topic-3); }
+.topic-4 { color: var(--topic-4); }
+.topic-5 { color: var(--topic-5); }
+.topic-6 { color: var(--topic-6); }
+.topic-7 { color: var(--topic-7); }
+.topic-8 { color: var(--topic-8); }
+.topic-9 { color: var(--topic-9); }
+.topic-10 { color: var(--topic-10); }
+.topic-11 { color: var(--topic-11); }
+.topic-12 { color: var(--topic-12); }
+
+/* The streaming chat's cursor: a block that blinks while the host's reply comes in (still under reduced motion). */
+.chat-cursor {
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 0.15em;
+  vertical-align: -0.12em;
+  background: currentColor;
+  animation: chat-cursor 1s steps(1) infinite;
+}
+@keyframes chat-cursor {
+  50% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-cursor { animation: none; opacity: 0.6; }
+}
+
+/*
+ * The TV scales as one: its screens are drawn for a 1920 x 1080 set (1rem = 16px there), and the root size follows
+ * whichever of the screen's width or height is tighter, so a 1280 laptop, a 1080p TV and a 4K set all show the same
+ * layout, never cut off. Everything on the TV is in rem, so this one rule does it.
+ */
+:root:has([data-theme="carbon"]) {
+  font-size: clamp(8px, min(0.8333vw, 1.4815vh), 40px);
+}
+/* A portrait screen (a TV page opened on a phone) reads at phone size instead, and stacks (breakpoints are rem too). */
+@media (max-aspect-ratio: 1/1) {
+  :root:has([data-theme="carbon"]) {
+    font-size: clamp(12px, 3.2vw, 18px);
+  }
 }

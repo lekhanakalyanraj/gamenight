@@ -1,6 +1,9 @@
 """The simulator's own view of the quiz rules: it recomputes every score, so it must agree with the database on
 the same cases the pgTAP test proves (875 and 625 for speed, 1000/667/333 for estimates, 1500 with the joker)."""
 
+import random
+
+from gamenight_simulator import quiz
 from gamenight_simulator.quiz import broadcast_answer_leaks, early_answer_lines, expected_points
 
 T0 = "2026-10-01T10:00:00+00:00"
@@ -56,3 +59,27 @@ def test_an_answer_broadcast_before_its_reveal_is_a_leak():
     ])
     assert leaks == ["question 2's answer was broadcast before its reveal",
                      "a player's answer was broadcast to the whole room"]
+
+
+def test_in_order_scores_by_speed_when_all_right_and_100_a_place_otherwise():
+    question = {"kind": "order", "answer": {"order": [2, 0, 3, 1]}, "opened_at": "2026-10-04T10:00:00+00:00",
+                "seconds": 20}
+    answers = [
+        {"member_id": "asha", "answer": {"order": [2, 0, 3, 1]}, "answered_at": "2026-10-04T10:00:10+00:00",
+         "joker": False},
+        {"member_id": "ben", "answer": {"order": [2, 0, 1, 3]}, "answered_at": "2026-10-04T10:00:02+00:00",
+         "joker": True},
+        {"member_id": "chen", "answer": {"order": [3, 1, 2, 0]}, "answered_at": "2026-10-04T10:00:01+00:00",
+         "joker": False},
+    ]
+    assert quiz.expected_points(question, answers) == {"asha": 750, "ben": 400, "chen": 0}
+
+
+def test_bots_answer_the_new_kinds_in_their_own_shapes():
+    rng = random.Random(1)
+    order = {"kind": "order", "key": {"order": [2, 0, 3, 1]}, "options": ["A", "B", "C", "D"]}
+    assert quiz.pick_answer(order, True, rng) == {"order": [2, 0, 3, 1]}
+    wrong = quiz.pick_answer(order, False, rng)["order"]
+    assert sorted(wrong) == [0, 1, 2, 3] and wrong != [2, 0, 3, 1]
+    assert quiz.pick_answer({"kind": "fake_real", "key": {"value": False}}, False, rng) == {"value": True}
+    assert quiz.total_questions({"plan": [{"questions": 5}, {"questions": 8}, {"questions": 5}]}) == 18

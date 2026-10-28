@@ -52,8 +52,8 @@ export function HostDrawer({ game, roomId, voice }: { game: Game; roomId: string
             initial={{ y: "100%", opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: "100%", opacity: 0 }}
-            transition={{ type: "spring", stiffness: 380, damping: 34 }}
-            className="mb-2 flex max-h-[70dvh] flex-col gap-3 overflow-y-auto rounded-3xl border border-border bg-surface-2 p-4"
+            transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
+            className="mb-2 flex max-h-[70dvh] flex-col gap-3 overflow-y-auto border border-ink bg-background p-4"
           >
             <div className="grid grid-cols-2 gap-2">
               <Button variant="secondary" disabled={pending} onClick={() => control(paused ? "resume" : "pause")}>

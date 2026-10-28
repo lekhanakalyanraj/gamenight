@@ -48,6 +48,14 @@ def rows(root: Path) -> list[tuple[str, str, str, str]]:
         out.append(("Quiz accuracy", "no broken question kept",
                     f"{len(bad) - sum(bool(c['kept']) for c in bad)}/{len(bad)} broken dropped",
                     f"{sum(bool(c['kept']) for c in good)}/{len(good)} good kept" + (f"; fresh: {fresh}" if fresh else "")))
+    fun = find(root, "quiz-fun-results.json")
+    if fun is not None:
+        t = fun["tally"]
+        out.append(("Quiz fun and brain teasers", "dull dropped, no broken teaser kept",
+                    f"{t['dull'] - t['dull_cleared']}/{t['dull']} dull dropped",
+                    f"{t['fun_cleared']}/{t['fun']} good kept; teasers: "
+                    f"{t['broken_teasers'] - t['broken_teasers_kept']}/{t['broken_teasers']} broken dropped, "
+                    f"{t['sound_teasers_kept']}/{t['sound_teasers']} sound kept"))
     cards = find(root, "headsup-cards-results.json")
     if cards is not None:
         cases = cards["cases"]

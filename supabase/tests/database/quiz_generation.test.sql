@@ -2,9 +2,10 @@ begin;
 create extension if not exists pgtap with schema extensions;
 
 -- Quiz Night, 5b: picking a topic in the lobby tells the room's agent (topic_picked); the agent reads a topic's
--- coverage (counts only) and saves verified questions, checked again here.
+-- coverage (counts only) and saves verified questions, checked again here. Slice 9: every kind but pictures, each with
+-- its hook; only a brain teaser may be ungrounded.
 
-select plan(16);
+select plan(24);
 
 create function pg_temp.act_as(p_uid uuid) returns void language sql as $$
   select set_config('role', 'authenticated', true),
@@ -25,13 +26,16 @@ begin
   return r;
 end $$;
 create function pg_temp.save(p_kind text, p_prompt text, p_options jsonb, p_answer jsonb,
-                             p_source text default 'https://en.wikipedia.org/wiki/Mars') returns uuid
+                             p_source text default 'https://en.wikipedia.org/wiki/Mars', p_clues jsonb default null,
+                             p_unit text default null) returns uuid
 language plpgsql as $$
 declare r uuid;
 begin
   set local role agents_svc;
   r := agents_api.save_quiz_question('Space ', p_kind, 1::smallint, 'family', ' ' || p_prompt || ' ', p_options,
-                                     p_answer, null, p_source, 'Mars is the fourth planet from the Sun.');
+                                     p_answer, p_unit, p_source,
+                                     case when p_source is not null then 'Mars is the fourth planet from the Sun.' end,
+                                     ' Mars looks red because of iron oxide. ', p_clues);
   reset role;
   return r;
 end $$;
@@ -60,7 +64,7 @@ select is((select count(*)::int from dispatch.events where room_id = pg_temp.id(
           'picking a topic tells the room''s agent once');
 select is((select payload from dispatch.events where room_id = pg_temp.id('room') and kind = 'topic_picked'),
           jsonb_build_object('member_id', pg_temp.id('asha'), 'topic', (select topic from public.room_members
-                                                                       where id = pg_temp.id('asha'))),
+                                                                       where id = pg_temp.id('asha')), 'context', null),
           'the event says who picked which topic');
 select pg_temp.act_as('00000000-0000-0000-0000-000000000101');
 select public.set_topic(pg_temp.id('room'), 'Bollywood');
@@ -80,26 +84,47 @@ select ok(pg_temp.coverage('cricket')::text !~ 'answer|prompt', 'coverage never 
 insert into ids (k, id) values ('saved', pg_temp.save('choice', 'Which planet is fourth from the Sun?',
                                                       '["Venus", "Mars", "Jupiter", "Saturn"]', '{"option": 1}'));
 select isnt(pg_temp.id('saved'), null, 'a verified question is saved');
-select is((select row(topic, prompt, origin, status)::text from content.quiz_bank where id = pg_temp.id('saved')),
-          row('space', 'Which planet is fourth from the Sun?', 'generated', 'verified')::text,
-          'filed under its topic, trimmed, as generated and ready to use');
+select is((select row(topic, prompt, origin, status, grounded, hook)::text from content.quiz_bank where id = pg_temp.id('saved')),
+          row('space', 'Which planet is fourth from the Sun?', 'generated', 'verified', true,
+              'Mars looks red because of iron oxide.')::text,
+          'filed under its topic, trimmed, grounded, with its hook, and ready to use');
 select is(pg_temp.coverage('space'), '{"choice": 1}'::jsonb, 'and it counts towards the topic''s coverage');
 select is(pg_temp.save('choice', 'Which planet is fourth from the Sun?', '["Venus", "Mars", "Jupiter", "Saturn"]',
                        '{"option": 1}'), null, 'the same question twice is skipped');
 select throws_ok($$ select pg_temp.save('picture', 'Which planet is this?', '["Venus", "Mars"]', '{"option": 1}') $$,
                  '22023', null, 'generated questions are never pictures (those need an image checked by hand)');
+select isnt(pg_temp.save('choice', 'Which planet has the tallest volcano?', '["Venus", "Mars"]', '{"option": 1}',
+                         'https://science.nasa.gov/mars/facts/'), null, 'a page from the web search is a source too');
 select throws_ok($$ select pg_temp.save('choice', 'Which planet is red?', '["Venus", "Mars"]', '{"option": 1}',
-                                        'https://example.com/wiki/Mars') $$,
-                 '22023', null, 'the source must be English Wikipedia');
+                                        'https://www.reddit.com/r/space/comments/mars') $$,
+                 '22023', null, 'never a forum or a social site');
 select throws_ok($$ select pg_temp.save('choice', 'Which planet is red?', '["Venus", "Mars"]', '{"option": 1}',
-                                        'https://en.wikipedia.org/wiki/Mars?action=edit') $$,
-                 '22023', null, 'an article, not any page on the site');
+                                        'https://space.fandom.com/wiki/Mars') $$,
+                 '22023', null, 'nor a fan wiki, on any of its subdomains');
+select throws_ok($$ select pg_temp.save('choice', 'Which planet is red?', '["Venus", "Mars"]', '{"option": 1}',
+                                        'http://science.nasa.gov/mars/facts/') $$,
+                 '22023', null, 'and only over https');
 select throws_ok($$ select pg_temp.save('choice', 'Which planet is red?', '["Venus", "Mars"]', '{"option": 7}') $$,
                  null, null, 'the bank''s own checks still apply (the answer must be one of the options)');
 
+-- ---- the new kinds ---------------------------------------------------------------------------------------------------
+select isnt(pg_temp.save('teaser', 'What has keys but opens no locks?', '["A piano", "A map", "A diary", "A safe"]',
+                         '{"option": 0}', null), null, 'a brain teaser is saved without a source');
+select is((select grounded from content.quiz_bank where prompt = 'What has keys but opens no locks?'), false,
+          'and marked ungrounded');
+select throws_ok($$ select pg_temp.save('fake_real', 'Mars has two moons.', null, '{"value": true}', null) $$,
+                 '22023', null, 'anything but a teaser needs its Wikipedia source');
+select throws_ok($$ select pg_temp.save('connect', 'What links these?', '["Red", "Blue", "Green", "Pink"]',
+                                        '{"option": 0}') $$, null, null, 'a connections question needs its clues');
+select isnt(pg_temp.save('order', 'Put these in order of distance from the Sun.', '["Mars", "Venus", "Earth"]',
+                         '{"order": [1, 2, 0]}', p_unit => 'closest first'), null, 'an in-order question is saved');
+select throws_ok($$ select pg_temp.save('order', 'Put these in order of size.', '["Mars", "Venus", "Earth"]',
+                                        '{"order": [0, 0, 1]}', p_unit => 'smallest first') $$,
+                 null, null, 'an order must use every option once');
+
 -- ---- who may call them --------------------------------------------------------------------------------------------
 select ok(not has_function_privilege('authenticated', 'agents_api.save_quiz_question(text, text, smallint, '
-          'public.age_rating, text, jsonb, jsonb, text, text, text)', 'execute'), 'players can''t save questions');
+          'public.age_rating, text, jsonb, jsonb, text, text, text, text, jsonb)', 'execute'), 'players can''t save questions');
 select ok(not has_function_privilege('game_master_svc', 'agents_api.quiz_coverage(uuid, text)', 'execute'),
           'only the agents service reads coverage');
 

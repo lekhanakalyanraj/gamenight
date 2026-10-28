@@ -44,6 +44,7 @@ services:
       REDIS_URI: redis://redis:6379
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}  # optional: web search for quiz questions
       # The agents reach the game database only as agents_svc (local login from supabase/seed.sql).
       AGENTS_DATABASE_URL: postgresql://agents_svc:local-dev-agents@host.docker.internal:55422/postgres
       # The game master's own login: only game_api. The host agent's login above can't read a card.

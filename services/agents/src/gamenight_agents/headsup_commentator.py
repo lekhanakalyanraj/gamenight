@@ -17,17 +17,19 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from gamenight_agents import narrator
 from gamenight_agents.headsup_rules import Moment, scripted_line
 from gamenight_agents.models import game_master_model
+from gamenight_agents.persona import HOST_VOICE
 from gamenight_agents.quiz_content import _text
 from gamenight_agents.turn import Turn
 
 log = logging.getLogger("gamenight.agents.headsup_commentator")
 
-SYSTEM = """You're the commentator for Heads Up at gamenight, on the TV: a hype sports commentator, fast, loud and
-warm. In Heads Up the guesser turns their back to the TV; the room shouts clues for the word on the TV; the guesser taps
-Got it or Pass.
+SYSTEM = """You're the commentator for Heads Up at gamenight, on the TV: an easygoing commentator, quick and grinning,
+never shouty. In Heads Up the guesser turns their back to the TV; the room shouts clues for the word on the TV; the
+guesser taps Got it or Pass.
+""" + HOST_VOICE + """
 
 You get one moment of the game as JSON data, and write ONE line for it:
-- 1 or 2 short sentences, under 150 characters, no emoji, no hashtags. Suit the room's age rating.
+- 1 or 2 short sentences, under 120 characters, no hashtags. Suit the room's age rating.
 - turn_start: call the guesser up and tell them to turn their back to the TV.
 - streak: hype the run of Got it (say the number), without naming any word.
 - turn_end: the score; you may name a card or two from that turn's "cards" (they're public now). Never any other word.

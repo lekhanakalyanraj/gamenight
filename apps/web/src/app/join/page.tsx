@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { Card, Page } from "@/components/ui";
+import { Card, Page, Wordmark } from "@/components/ui";
 import { createClient, getIdentity } from "@/lib/supabase/server";
 import { isRoomCode } from "@/lib/validate";
 
@@ -25,8 +25,9 @@ export default async function JoinPage({ searchParams }: PageProps<"/join">) {
   }
   return (
     <Page>
-      <header className="flex flex-col gap-1">
-        <h1 className="text-3xl font-semibold tracking-tight">Join a game</h1>
+      <Wordmark />
+      <header className="flex flex-col gap-2">
+        <h1 className="text-4xl tracking-tight">Join a game</h1>
         <p className="text-muted">Enter the code on the TV. No account needed.</p>
       </header>
       <Card>

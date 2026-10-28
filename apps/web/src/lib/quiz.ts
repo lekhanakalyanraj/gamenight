@@ -5,51 +5,90 @@ import type { Game, QuizAnswer, QuizQuestion, QuizScore } from "@gamenight/db-ty
  * reveal (the database keeps the key elsewhere until then), so a screen can't show an answer early by mistake.
  */
 
-export type QuizKind = "choice" | "true_false" | "estimate" | "picture";
-export type QuizConfig = { rounds: number; per_round: number; seconds: number; round_kinds: QuizKind[] };
-export type Key = { option?: number; value?: boolean | number };
+export type QuizKind =
+  | "choice" | "true_false" | "estimate" | "picture" | "teaser" | "fake_real" | "lightning" | "order" | "connect";
+export type RoundName = "teasers" | "fake_real" | "lightning" | "picture" | "mix" | "order" | "closest" | "connect";
+/** One round of the plan the database made at the start: its name, how many questions, and its timing. */
+export type RoundPlan = { round: RoundName; questions: number; seconds?: number; extra?: number; reveal: number };
+export type QuizConfig = { rounds: number; seconds: number; plan: RoundPlan[] };
+export type Key = { option?: number; value?: boolean | number; order?: number[] };
 export type ChoiceResults = { answered: number; right: number; picks: number[] };
 export type TrueFalseResults = { answered: number; right: number; picks: { true: number; false: number } };
 export type EstimateResults = { answered: number; closest: { member_id: string; value: number }[] };
+export type OrderResults = { answered: number; right: number };
 
-export const KIND_LABEL: Record<QuizKind, string> = {
-  choice: "Multiple choice",
-  true_false: "True or false",
+/** The lengths the host picks from: always teasers first and connections last, the middle filling in. */
+export const LENGTHS = [
+  { rounds: 3, label: "Short", about: "Teasers, fake or real, connections" },
+  { rounds: 5, label: "Standard", about: "Adds lightning and pictures" },
+  { rounds: 8, label: "Full", about: "Every round" },
+] as const;
+
+export const ROUND_LABEL: Record<RoundName, string> = {
+  teasers: "Brain teasers",
+  fake_real: "Fake or real",
+  lightning: "Lightning round",
   picture: "Picture round",
-  estimate: "Closest estimate",
+  mix: "The mix",
+  order: "In order",
+  closest: "Closest wins",
+  connect: "Connections",
 };
 
-export const KIND_HOW: Record<QuizKind, string> = {
-  choice: "Pick one of four on your phone. Right and fast scores the most.",
-  true_false: "True or false? Right and fast scores the most.",
+export const ROUND_HOW: Record<RoundName, string> = {
+  teasers: "Riddles, wordplay and little puzzles. Work it out, then pick one.",
+  fake_real: "A statement on the TV. Fake or real? Right and fast scores the most.",
+  lightning: "Two options, six seconds. Don't think, tap.",
   picture: "Look at the picture and pick what it shows.",
-  estimate: "Type a number. Nobody needs it exactly: the closer you get, the more you score.",
+  mix: "Pick one of four. Watch for the twist.",
+  order: "Tap the four in order, first to last. Each one in the right place scores.",
+  closest: "Type a number. Nobody needs it exactly: the closer you get, the more you score.",
+  connect: "Clues drop one by one. What links them? Answer early, score more.",
 };
 
 /**
  * The answer tiles: a colour and a shape each, the same on the TV and every phone, so you can answer while
  * looking at the TV, and the shape tells them apart without the colour.
  */
-export const TILES = [
-  { shape: "triangle", label: "Triangle", className: "bg-[#c2410c] text-white" },
-  { shape: "diamond", label: "Diamond", className: "bg-[#1d4ed8] text-white" },
-  { shape: "circle", label: "Circle", className: "bg-[#a16207] text-white" },
-  { shape: "square", label: "Square", className: "bg-[#15803d] text-white" },
-] as const;
+/** Answer tiles are told apart by a letter, not a colour: the design keeps colour for state (right, wrong). */
+export const TILES = [{ letter: "A" }, { letter: "B" }, { letter: "C" }, { letter: "D" }] as const;
 
 export const TRUE_FALSE = [
-  { value: true, label: "True", className: "bg-[#15803d] text-white" },
-  { value: false, label: "False", className: "bg-[#b91c1c] text-white" },
+  { value: true, label: "True", letter: "T" },
+  { value: false, label: "False", letter: "F" },
 ] as const;
+
+export const FAKE_REAL = [
+  { value: false, label: "Fake", letter: "F" },
+  { value: true, label: "Real", letter: "R" },
+] as const;
+
+/** How long each connections clue waits before the next one shows. */
+export const CLUE_SECONDS = 5;
 
 export function quizConfig(game: Game): QuizConfig {
   const c = game.config as Partial<QuizConfig>;
-  return { rounds: c.rounds ?? 4, per_round: c.per_round ?? 5, seconds: c.seconds ?? 20, round_kinds: c.round_kinds ?? [] };
+  return { rounds: c.rounds ?? 0, seconds: c.seconds ?? 20, plan: Array.isArray(c.plan) ? c.plan : [] };
 }
 
 export function totalQuestions(game: Game): number {
-  const c = quizConfig(game);
-  return c.rounds * c.per_round;
+  return quizConfig(game).plan.reduce((sum, r) => sum + r.questions, 0);
+}
+
+/** Where question `number` falls in the plan: its round (from 1), the round's name, and whether it opens it. */
+export function slotOf(game: Game, number: number): { round: number; name: RoundName | null; first: boolean } {
+  let upto = 0;
+  for (const [i, r] of quizConfig(game).plan.entries()) {
+    if (number <= upto + r.questions) return { round: i + 1, name: r.round, first: number === upto + 1 };
+    upto += r.questions;
+  }
+  return { round: 0, name: null, first: false };
+}
+
+/** The round label for a question on screen: "Round 2 · Fake or real". */
+export function roundLabel(game: Game, number: number): string {
+  const { round, name } = slotOf(game, number);
+  return name ? `Round ${round} · ${ROUND_LABEL[name]}` : "Quiz Night";
 }
 
 /** The question the room is on: the latest asked. */
@@ -70,20 +109,37 @@ export function keyOf(q: QuizQuestion): Key | null {
   return q.revealed_at ? ((q.answer as Key | null) ?? null) : null;
 }
 
-/** The revealed answer in words: "Canberra", "False", "1969 (year)". Null before the reveal. */
-export function answerText(q: QuizQuestion): string | null {
-  const key = keyOf(q);
-  if (!key) return null;
-  if (key.option !== undefined) return optionsOf(q)[key.option] ?? null;
-  if (typeof key.value === "boolean") return key.value ? "True" : "False";
-  if (typeof key.value === "number") return `${formatValue(key.value, q.unit)}${q.unit ? ` ${q.unit}` : ""}`;
-  return null;
+export function cluesOf(q: QuizQuestion): string[] {
+  return Array.isArray(q.clues) ? (q.clues as string[]) : [];
 }
 
-/** What a player answered, in words. */
+/** How many connections clues are showing: one more every CLUE_SECONDS from the question opening, all at the reveal. */
+export function cluesShown(q: QuizQuestion, now: number): number {
+  const clues = cluesOf(q).length;
+  if (q.revealed_at) return clues;
+  const opened = Date.parse(q.opened_at);
+  const elapsed = Number.isFinite(opened) ? Math.max(0, now - opened) : 0;
+  return Math.min(clues, 1 + Math.floor(elapsed / (CLUE_SECONDS * 1000)));
+}
+
+/** True for the kinds answered with two value buttons rather than options. */
+export function isTwoWay(kind: QuizKind): boolean {
+  return kind === "true_false" || kind === "fake_real";
+}
+
+/** The revealed answer in words: "Canberra", "Fake", "1969 (year)", "Oldest first: A, B, C, D". Null before. */
+export function answerText(q: QuizQuestion): string | null {
+  const key = keyOf(q);
+  return key ? pickText(q, key) : null;
+}
+
+/** An answer in words. */
 export function pickText(q: QuizQuestion, answer: Key): string {
+  if (answer.order) return `${q.unit ? `${q.unit}: ` : ""}${answer.order.map((i) => optionsOf(q)[i] ?? "?").join(", ")}`;
   if (answer.option !== undefined) return optionsOf(q)[answer.option] ?? "?";
-  if (typeof answer.value === "boolean") return answer.value ? "True" : "False";
+  if (typeof answer.value === "boolean") {
+    return kindOf(q) === "fake_real" ? (answer.value ? "Real" : "Fake") : answer.value ? "True" : "False";
+  }
   if (typeof answer.value === "number") return `${formatValue(answer.value, q.unit)}${q.unit ? ` ${q.unit}` : ""}`;
   return "?";
 }
@@ -102,10 +158,20 @@ export function formatValue(n: number, unit: string | null): string {
   return yearish && Number.isInteger(n) && n >= 1000 && n <= 2999 ? String(n) : formatNumber(n);
 }
 
-/** The source's article title, from its Wikipedia URL: "Source: Wikipedia, Canberra". */
-export function sourceTitle(url: string | null): string | null {
-  const match = url?.match(/^https:\/\/en\.wikipedia\.org\/wiki\/([^?#]+)$/);
-  return match ? decodeURIComponent(match[1]).replace(/_/g, " ") : null;
+/**
+ * Where a revealed question came from, for the line under its answer: "Wikipedia, Canberra", a site's name
+ * ("britannica.com"), or for a brain teaser "a puzzle by the AI host". Null when there's nothing to say.
+ */
+export function sourceLabel(q: QuizQuestion): string | null {
+  const url = q.source_url;
+  if (!url) return kindOf(q) === "teaser" && q.revealed_at ? "A puzzle by the AI host" : null;
+  const wiki = url.match(/^https:\/\/en\.wikipedia\.org\/wiki\/([^?#]+)$/);
+  if (wiki) return `Source · Wikipedia, ${decodeURIComponent(wiki[1]).replace(/_/g, " ")}`;
+  try {
+    return `Source · ${new URL(url).hostname.replace(/^www\./, "")}`;
+  } catch {
+    return null;
+  }
 }
 
 /** Everyone in points order (ties keep seat order), each with their place; tied points share a place. */
@@ -124,15 +190,13 @@ export function placeOf(scores: QuizScore[], memberId: string): number | null {
 
 /** Whether the next question starts a new round (so the screens can introduce it). */
 export function nextIsNewRound(game: Game, asked: number): boolean {
-  const c = quizConfig(game);
-  return asked > 0 && asked < c.rounds * c.per_round && asked % c.per_round === 0;
+  return asked > 0 && asked < totalQuestions(game) && slotOf(game, asked + 1).first;
 }
 
-/** The round the next question belongs to, and its kind. */
-export function nextRound(game: Game, asked: number): { round: number; kind: QuizKind | null } {
-  const c = quizConfig(game);
-  const round = Math.floor(asked / c.per_round) + 1;
-  return { round, kind: c.round_kinds[round - 1] ?? null };
+/** The round the next question belongs to, and its name. */
+export function nextRound(game: Game, asked: number): { round: number; name: RoundName | null } {
+  const { round, name } = slotOf(game, asked + 1);
+  return { round, name };
 }
 
 /** Longest run of right answers per player, from the revealed answers (readable by everyone after each reveal). */

@@ -4,6 +4,7 @@ A move the rules don't allow comes back as Refused, with the database's SQLSTATE
 now; 22023: bad arguments), so the agent can read why and try something legal.
 """
 
+import json
 from typing import Any
 
 import psycopg
@@ -110,6 +111,14 @@ async def ask(game: str, question: str, for_member: str | None, event: str) -> d
 
 async def reveal(game: str, event: str) -> dict[str, Any]:
     return await _call("select game_api.gm_reveal(%(game)s::uuid, %(event)s::uuid)", {"game": game, "event": event})
+
+
+async def plan_quiz(game: str, items: list[dict[str, Any]], event: str,
+                    rounds: list[str] | None = None) -> dict[str, Any]:
+    return await _call(
+        "select game_api.gm_plan_quiz(%(game)s::uuid, %(items)s::jsonb, %(event)s::uuid, %(rounds)s::text[])",
+        {"game": game, "items": json.dumps(items), "event": event, "rounds": rounds},
+    )
 
 
 # ---- Heads Up -----------------------------------------------------------------------------------------------------
