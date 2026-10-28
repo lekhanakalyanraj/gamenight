@@ -119,7 +119,8 @@ def test_the_search_keeps_pages_worth_quoting_and_sends_the_key_in_a_header(monk
     assert request.headers["Authorization"] == "Bearer test-only-key"
     assert "test-only-key" not in str(request.url)  # never in the URL
     body = json.loads(request.content)
-    assert "IPL, the Dhoni years" in body["query"] and "reddit.com" in body["exclude_domains"]
+    assert "IPL, the Dhoni years" in body["query"]
+    assert body["exclude_domains"] == list(sources.BLOCKED)  # every blocked site, left out of the search itself
     assert body["search_depth"] == "basic"  # one credit a search
 
 

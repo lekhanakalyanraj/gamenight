@@ -1,9 +1,3 @@
 # Accepted OSV-Scanner findings, each with its reason and an expiry: on that date the finding fails the scan again,
 # so it's looked at once more (a fix may be out by then).
-
-[[IgnoredVulns]]
-id = "GHSA-vfj7-8cjw-p6xm"
-ignoreUntil = 2026-11-15
-reason = """braces 3.0.3 (no fixed version yet): deeply nested brace patterns can exhaust the stack. It's a dev-only
-dependency (eslint-config-next -> @next/eslint-plugin-next -> fast-glob -> micromatch), run at lint time on patterns
-written in this repo; it's in no production bundle or image, and no user input reaches it."""
+# None at the moment.
